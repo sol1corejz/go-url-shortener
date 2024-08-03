@@ -57,10 +57,10 @@ func handleURL(storage *URLStorage) http.HandlerFunc {
 			}
 			originalURL := string(body)
 
-			shortId := storage.SetURL(originalURL)
+			shortID := storage.SetURL(originalURL)
 			w.WriteHeader(http.StatusCreated)
 			w.Header().Set("Content-Type", "text/plain")
-			w.Write([]byte("http://localhost:8080/" + shortId))
+			w.Write([]byte("http://localhost:8080/" + shortID))
 		} else {
 			if r.Method != http.MethodGet {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
