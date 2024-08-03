@@ -53,10 +53,6 @@ func handlePostURL(storage *URLStorage) http.HandlerFunc {
 			return
 		}
 
-		if err != nil {
-			http.Error(w, "Bad request", http.StatusBadRequest)
-			return
-		}
 		originalURL := string(body)
 
 		shortID := storage.SetURL(originalURL)
