@@ -81,9 +81,8 @@ func handleURL(storage *URLStorage) http.HandlerFunc {
 				return
 			}
 
-			w.WriteHeader(http.StatusTemporaryRedirect)
 			w.Header().Set("Location", originalURL)
-			w.Write([]byte(originalURL))
+			w.WriteHeader(http.StatusTemporaryRedirect)
 		}
 	}
 }
