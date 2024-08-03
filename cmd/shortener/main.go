@@ -32,7 +32,6 @@ func (storage *URLStorage) GetURL(shortURL string) (string, error) {
 }
 
 func generateID() (string, error) {
-	// Генерация случайного байтового массива
 	bytes := make([]byte, 6)
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err
@@ -91,10 +90,10 @@ func main() {
 
 	us := &URLStorage{map[string]string{}}
 
-	//mux := http.NewServeMux()
-	http.Handle("/", handleURL(us))
+	mux := http.NewServeMux()
+	mux.Handle("/", handleURL(us))
 
-	err := http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(":8080", mux)
 	if err != nil {
 		panic(err)
 	}
