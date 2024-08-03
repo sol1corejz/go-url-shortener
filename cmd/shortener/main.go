@@ -9,24 +9,24 @@ import (
 	"strings"
 )
 
-type UrlStorage struct {
-	url map[string]string
+type URLStorage struct {
+	URL map[string]string
 }
 
-func (storage *UrlStorage) SetUrl(newUrl string) string {
-	shortUrl, err := generateID()
+func (storage *URLStorage) SetURL(newURL string) string {
+	shortURL, err := generateID()
 	if err != nil {
 		return ""
 	}
 
-	storage.url[shortUrl] = newUrl
-	return shortUrl
+	storage.URL[shortURL] = newURL
+	return shortURL
 }
 
-func (storage *UrlStorage) GetUrl(shortUrl string) (string, error) {
-	value, ok := storage.url[shortUrl]
+func (storage *URLStorage) GetURL(shortURL string) (string, error) {
+	value, ok := storage.URL[shortURL]
 	if !ok {
-		return "", errors.New(shortUrl + " not exist")
+		return "", errors.New(shortURL + " not exist")
 	}
 	return value, nil
 }
@@ -40,7 +40,7 @@ func generateID() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(bytes), nil
 }
 
-func handleUrl(storage *UrlStorage) http.HandlerFunc {
+func handleURL(storage *URLStorage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		body, err := io.ReadAll(r.Body)
@@ -55,9 +55,9 @@ func handleUrl(storage *UrlStorage) http.HandlerFunc {
 				http.Error(w, "Bad request", http.StatusBadRequest)
 				return
 			}
-			originalUrl := string(body)
+			originalURL := string(body)
 
-			shortId := storage.SetUrl(originalUrl)
+			shortId := storage.SetURL(originalURL)
 			w.WriteHeader(http.StatusCreated)
 			w.Header().Set("Content-Type", "text/plain")
 			w.Write([]byte("http://localhost:8080/" + shortId))
@@ -74,7 +74,7 @@ func handleUrl(storage *UrlStorage) http.HandlerFunc {
 				return
 			}
 
-			originalUrl, err := storage.GetUrl(shortID)
+			originalURL, err := storage.GetURL(shortID)
 
 			if err != nil {
 				http.Error(w, "Bad request", http.StatusBadRequest)
@@ -82,17 +82,17 @@ func handleUrl(storage *UrlStorage) http.HandlerFunc {
 			}
 
 			w.WriteHeader(http.StatusTemporaryRedirect)
-			w.Header().Set("Location", originalUrl)
+			w.Header().Set("Location", originalURL)
 		}
 	}
 }
 
 func main() {
 
-	us := &UrlStorage{map[string]string{}}
+	us := &URLStorage{map[string]string{}}
 
 	//mux := http.NewServeMux()
-	http.Handle("/", handleUrl(us))
+	http.Handle("/", handleURL(us))
 
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
