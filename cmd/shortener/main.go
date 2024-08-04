@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -41,11 +42,6 @@ func generateID() (string, error) {
 
 func handlePostURL(storage *URLStorage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
 		body, err := io.ReadAll(r.Body)
 
 		if err != nil {
@@ -53,28 +49,29 @@ func handlePostURL(storage *URLStorage) http.HandlerFunc {
 			return
 		}
 
+		if string(body) == "" {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+
 		originalURL := string(body)
 
+		parsedURL, err := url.ParseRequestURI(originalURL)
+		if err != nil || !parsedURL.IsAbs() {
+			http.Error(w, "Invalid URL", http.StatusBadRequest)
+			return
+		}
+
 		shortID := storage.SetURL(originalURL)
-		w.WriteHeader(http.StatusCreated)
 		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte("http://localhost:8080/" + shortID))
 	}
 }
 
 func handleGetOriginalURL(storage *URLStorage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
 		shortID := strings.TrimPrefix(r.URL.Path, "/")
-
-		if shortID == "" {
-			http.Error(w, "Bad request", http.StatusBadRequest)
-			return
-		}
 
 		originalURL, err := storage.GetURL(shortID)
 
@@ -100,7 +97,7 @@ func main() {
 		case http.MethodGet:
 			handleGetOriginalURL(us).ServeHTTP(w, r)
 		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		}
 	})
 
