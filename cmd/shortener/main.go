@@ -3,105 +3,92 @@ package main
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"errors"
-	"io"
+	"fmt"
+	"github.com/go-chi/chi/v5"
+	"io/ioutil"
 	"net/http"
-	"net/url"
 	"strings"
+	"sync"
 )
 
-type URLStorage struct {
-	URL map[string]string
-}
+var (
+	urlStore = make(map[string]string)
+	mu       sync.Mutex
+)
 
-func (storage *URLStorage) SetURL(newURL string) string {
-	shortURL, err := generateID()
+func generateShortID() string {
+	b := make([]byte, 6)
+	_, err := rand.Read(b)
 	if err != nil {
-		return ""
+		panic(err)
 	}
-
-	storage.URL[shortURL] = newURL
-	return shortURL
+	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-func (storage *URLStorage) GetURL(shortURL string) (string, error) {
-	value, ok := storage.URL[shortURL]
+func handlePost(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+		return
+	}
+	defer r.Body.Close()
+
+	originalURL := strings.TrimSpace(string(body))
+	if originalURL == "" {
+		http.Error(w, "Empty URL", http.StatusBadRequest)
+		return
+	}
+
+	shortID := generateShortID()
+	shortURL := fmt.Sprintf("http://localhost:8080/%s", shortID)
+
+	mu.Lock()
+	urlStore[shortID] = originalURL
+	mu.Unlock()
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte(shortURL))
+}
+
+func handleGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := strings.TrimPrefix(r.URL.Path, "/")
+	if id == "" {
+		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
+		return
+	}
+
+	mu.Lock()
+	originalURL, ok := urlStore[id]
+	mu.Unlock()
+
 	if !ok {
-		return "", errors.New(shortURL + " not exist")
+		http.Error(w, "URL not found", http.StatusBadRequest)
+		return
 	}
-	return value, nil
-}
 
-func generateID() (string, error) {
-	bytes := make([]byte, 6)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(bytes), nil
-}
-
-func handlePostURL(storage *URLStorage) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-
-		if err != nil {
-			http.Error(w, "Bad request", http.StatusBadRequest)
-			return
-		}
-
-		if string(body) == "" {
-			http.Error(w, "Bad request", http.StatusBadRequest)
-			return
-		}
-
-		originalURL := string(body)
-
-		parsedURL, err := url.ParseRequestURI(originalURL)
-		if err != nil || !parsedURL.IsAbs() {
-			http.Error(w, "Invalid URL", http.StatusBadRequest)
-			return
-		}
-
-		shortID := storage.SetURL(originalURL)
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("http://localhost:8080/" + shortID))
-	}
-}
-
-func handleGetOriginalURL(storage *URLStorage) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		shortID := strings.TrimPrefix(r.URL.Path, "/")
-
-		originalURL, err := storage.GetURL(shortID)
-
-		if err != nil {
-			http.Error(w, "Bad request", http.StatusBadRequest)
-			return
-		}
-
-		w.Header().Set("Location", originalURL)
-		w.WriteHeader(http.StatusTemporaryRedirect)
-	}
+	w.Header().Set("Location", originalURL)
+	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
 func main() {
 
-	us := &URLStorage{map[string]string{}}
+	r := chi.NewRouter()
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			handlePostURL(us).ServeHTTP(w, r)
-		case http.MethodGet:
-			handleGetOriginalURL(us).ServeHTTP(w, r)
-		default:
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		}
-	})
+	r.Post("/", handlePost)
+	r.Get("/{shortURL}", handleGet)
 
-	err := http.ListenAndServe(":8080", mux)
+	err := http.ListenAndServe(":8080", r)
 	if err != nil {
 		panic(err)
 	}

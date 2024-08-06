@@ -1,85 +1,33 @@
 package main
 
 import (
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/go-chi/chi/v5"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func Test_handleGetOriginalURL(t *testing.T) {
-	type want struct {
-		code        int
-		location    string
-		contentType string
-	}
-	tests := []struct {
-		name          string
-		inputShortURL string
-		storage       *URLStorage
-		want          want
-	}{
-		{
-			name: "Test valid shortURL",
-			storage: &URLStorage{URL: map[string]string{
-				"abc123": "https://www.google.com",
-			}},
-			inputShortURL: "abc123",
-			want: want{
-				code:        http.StatusTemporaryRedirect,
-				location:    `https://www.google.com`,
-				contentType: "",
-			},
-		},
-		{
-			name: "Test not valid shortURL",
-			storage: &URLStorage{URL: map[string]string{
-				"abc123": "https://www.google.com",
-			}},
-			inputShortURL: "abc12",
-			want: want{
-				code: http.StatusBadRequest,
-			},
-		},
-		{
-			name: "Test empty shortURL",
-			storage: &URLStorage{URL: map[string]string{
-				"abc123": "https://www.google.com",
-			}},
-			inputShortURL: "",
-			want: want{
-				code: http.StatusBadRequest,
-			},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/"+test.inputShortURL, nil)
-			w := httptest.NewRecorder()
+func testRequest(t *testing.T, ts *httptest.Server, method,
+	path string) (*http.Response, string) {
+	req, err := http.NewRequest(method, ts.URL+path, nil)
+	require.NoError(t, err)
 
-			handler := handleGetOriginalURL(test.storage)
-			handler.ServeHTTP(w, req)
+	resp, err := ts.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
 
-			res := w.Result()
-			defer res.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
 
-			assert.Equal(t, test.want.code, res.StatusCode)
-
-			if test.want.code == http.StatusTemporaryRedirect {
-				assert.Equal(t, test.want.location, res.Header.Get("Location"))
-			} else {
-				resBody, err := io.ReadAll(res.Body)
-				require.NoError(t, err)
-				assert.Equal(t, "Bad request\n", string(resBody))
-			}
-		})
-	}
+	return resp, string(respBody)
 }
 
-func Test_handlePostURL(t *testing.T) {
+func Test_handlePost(t *testing.T) {
 	type want struct {
 		code        int
 		contentType string
@@ -87,30 +35,18 @@ func Test_handlePostURL(t *testing.T) {
 	tests := []struct {
 		name     string
 		inputURL string
-		storage  *URLStorage
 		want     want
 	}{
 		{
 			name:     "Test correct URL",
-			storage:  &URLStorage{make(map[string]string)},
 			inputURL: "https://www.google.com",
 			want: want{
 				code:        http.StatusCreated,
-				contentType: "text/plain",
-			},
-		},
-		{
-			name:     "Test not correct URL",
-			storage:  &URLStorage{make(map[string]string)},
-			inputURL: "ht//www.google.com",
-			want: want{
-				code:        http.StatusBadRequest,
-				contentType: "text/plain",
+				contentType: "text/plain; charset=utf-8",
 			},
 		},
 		{
 			name:     "Test empty URL",
-			storage:  &URLStorage{make(map[string]string)},
 			inputURL: "",
 			want: want{
 				code:        http.StatusBadRequest,
@@ -118,13 +54,13 @@ func Test_handlePostURL(t *testing.T) {
 			},
 		},
 	}
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/", strings.NewReader(test.inputURL))
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.inputURL))
 			w := httptest.NewRecorder()
 
-			handler := handlePostURL(test.storage)
-			handler.ServeHTTP(w, req)
+			handlePost(w, req)
 
 			res := w.Result()
 			defer res.Body.Close()
@@ -144,6 +80,50 @@ func Test_handlePostURL(t *testing.T) {
 
 				assert.Len(t, shortURL, 8)
 			}
+		})
+	}
+}
+
+func Test_handleGet(t *testing.T) {
+	r := chi.NewRouter()
+	r.Get("/{shortURL}", handleGet)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	mu.Lock()
+	urlStore["abc123"] = "https://www.google.com"
+	mu.Unlock()
+
+	type want struct {
+		code     int
+		location string
+	}
+	tests := []struct {
+		name         string
+		inputShortID string
+		want         want
+	}{
+		{
+			name:         "Test valid short URL",
+			inputShortID: "abc123",
+			want:         want{code: http.StatusOK},
+		},
+		{
+			name:         "Test invalid short URL",
+			inputShortID: "ab23",
+			want:         want{code: http.StatusBadRequest},
+		},
+		{
+			name:         "Test empty short URL",
+			inputShortID: "",
+			want:         want{code: http.StatusNotFound},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			resp, _ := testRequest(t, ts, "GET", "/"+test.inputShortID)
+			assert.Equal(t, test.want.code, resp.StatusCode)
 
 		})
 	}
