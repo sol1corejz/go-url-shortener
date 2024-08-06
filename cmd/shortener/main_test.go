@@ -123,8 +123,8 @@ func Test_handleGet(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			resp, _ := testRequest(t, ts, "GET", "/"+test.inputShortID)
+			defer resp.Body.Close()
 			assert.Equal(t, test.want.code, resp.StatusCode)
-
 		})
 	}
 }
