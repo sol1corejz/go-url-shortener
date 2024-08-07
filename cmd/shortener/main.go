@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/go-chi/chi/v5"
+	"github.com/sol1corejz/go-url-shortener/cmd/config"
 	"io"
 	"net/http"
 	"strings"
@@ -45,7 +46,7 @@ func handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shortID := generateShortID()
-	shortURL := fmt.Sprintf("http://localhost:8080/%s", shortID)
+	shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
 
 	mu.Lock()
 	urlStore[shortID] = originalURL
@@ -82,14 +83,20 @@ func handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	config.ParseFlags()
+
+	if err := run(); err != nil {
+		panic(err)
+	}
+}
+
+func run() error {
+	fmt.Println("Running server on", config.FlagRunAddr)
 
 	r := chi.NewRouter()
 
 	r.Post("/", handlePost)
 	r.Get("/{shortURL}", handleGet)
 
-	err := http.ListenAndServe(":8080", r)
-	if err != nil {
-		panic(err)
-	}
+	return http.ListenAndServe(config.FlagRunAddr, r)
 }
