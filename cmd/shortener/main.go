@@ -27,11 +27,6 @@ func generateShortID() string {
 }
 
 func handlePost(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		return
-	}
-
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
@@ -58,12 +53,7 @@ func handlePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleGet(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		return
-	}
-
-	id := strings.TrimPrefix(r.URL.Path, "/")
+	id := chi.URLParam(r, "shortURL")
 	if id == "" {
 		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
 		return
