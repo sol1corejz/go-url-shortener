@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
+	"github.com/sol1corejz/go-url-shortener/internal/logger"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"strings"
@@ -81,12 +83,16 @@ func main() {
 }
 
 func run() error {
-	fmt.Println("Running server on", config.FlagRunAddr)
+	if err := logger.Initialize(config.FlagLogLevel); err != nil {
+		return err
+	}
+
+	logger.Log.Info("Running server", zap.String("address", config.FlagRunAddr))
 
 	r := chi.NewRouter()
 
-	r.Post("/", handlePost)
-	r.Get("/{shortURL}", handleGet)
+	r.Post("/", logger.RequestLogger(handlePost))
+	r.Get("/{shortURL}", logger.RequestLogger(handleGet))
 
 	return http.ListenAndServe(config.FlagRunAddr, r)
 }
