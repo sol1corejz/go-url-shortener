@@ -75,13 +75,14 @@ func handleJSONPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(resp); err != nil {
 		logger.Log.Debug("error encoding response", zap.Error(err))
 		return
 	}
-	w.WriteHeader(http.StatusCreated)
+
 }
 
 func handleGet(w http.ResponseWriter, r *http.Request) {

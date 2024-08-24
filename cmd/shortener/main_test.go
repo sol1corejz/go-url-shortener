@@ -149,7 +149,7 @@ func Test_handleJSONPost(t *testing.T) {
 				URL: "https://practicum.yandex.ru",
 			},
 			want: want{
-				code:        http.StatusOK,
+				code:        http.StatusCreated,
 				contentType: "application/json",
 				result:      models.Response{},
 			},
@@ -183,7 +183,7 @@ func Test_handleJSONPost(t *testing.T) {
 
 			assert.Equal(t, test.want.contentType, rr.Header().Get("Content-Type"))
 
-			if test.want.code == http.StatusOK {
+			if test.want.code == http.StatusCreated {
 				var resp models.Response
 				err := json.Unmarshal(rr.Body.Bytes(), &resp)
 				assert.NoError(t, err)
