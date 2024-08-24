@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"github.com/go-chi/chi/v5"
+	"github.com/sol1corejz/go-url-shortener/internal/models"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -125,6 +128,69 @@ func Test_handleGet(t *testing.T) {
 			resp, _ := testRequest(t, ts, "GET", "/"+test.inputShortID)
 			defer resp.Body.Close()
 			assert.Equal(t, test.want.code, resp.StatusCode)
+		})
+	}
+}
+
+func Test_handleJSONPost(t *testing.T) {
+	type want struct {
+		code        int
+		contentType string
+		result      models.Response
+	}
+	tests := []struct {
+		name    string
+		reqBody models.Request
+		want    want
+	}{
+		{
+			name: "Valid request",
+			reqBody: models.Request{
+				URL: "https://practicum.yandex.ru",
+			},
+			want: want{
+				code:        http.StatusOK,
+				contentType: "application/json",
+				result:      models.Response{},
+			},
+		},
+		{
+			name: "Invalid JSON",
+			reqBody: models.Request{
+				URL: "",
+			},
+			want: want{
+				code:        http.StatusBadRequest,
+				contentType: "text/plain; charset=utf-8",
+				result:      models.Response{},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+
+			reqBodyJSON, _ := json.Marshal(test.reqBody)
+			req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBuffer(reqBodyJSON))
+			req.Header.Set("Content-Type", "application/json")
+
+			rr := httptest.NewRecorder()
+
+			handler := http.HandlerFunc(handleJSONPost)
+			handler.ServeHTTP(rr, req)
+
+			assert.Equal(t, test.want.code, rr.Code)
+
+			assert.Equal(t, test.want.contentType, rr.Header().Get("Content-Type"))
+
+			if test.want.code == http.StatusOK {
+				var resp models.Response
+				err := json.Unmarshal(rr.Body.Bytes(), &resp)
+				assert.NoError(t, err)
+				assert.NotEmpty(t, resp.Result)
+			} else {
+				assert.Equal(t, rr.Body.String(), "Empty URL\n")
+			}
 		})
 	}
 }
