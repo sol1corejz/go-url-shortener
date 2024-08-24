@@ -169,7 +169,6 @@ func Test_handleJSONPost(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-
 			r := chi.NewRouter()
 			r.Post("/api/shorten", handleJSONPost)
 			r.Get("/{shortURL}", handleGet)
