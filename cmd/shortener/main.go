@@ -81,6 +81,7 @@ func handleJSONPost(w http.ResponseWriter, r *http.Request) {
 		logger.Log.Debug("error encoding response", zap.Error(err))
 		return
 	}
+	w.WriteHeader(http.StatusCreated)
 }
 
 func handleGet(w http.ResponseWriter, r *http.Request) {
