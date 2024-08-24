@@ -6,14 +6,16 @@ import (
 )
 
 var (
-	FlagRunAddr string
-	FlagBaseURL string
+	FlagRunAddr  string
+	FlagBaseURL  string
+	FlagLogLevel string
 )
 
 func ParseFlags() {
 
 	flag.StringVar(&FlagRunAddr, "a", ":8080", "address and port to run server")
 	flag.StringVar(&FlagBaseURL, "b", "http://localhost:8080", "base URL for shortened links")
+	flag.StringVar(&FlagLogLevel, "l", "info", "log level")
 	flag.Parse()
 
 	if envRunAddr := os.Getenv("SERVER_ADDRESS"); envRunAddr != "" {
