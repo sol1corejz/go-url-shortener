@@ -70,8 +70,11 @@ func handleJSONPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	shortID := generateShortID()
+	shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
+
 	resp := models.Response{
-		Result: req.URL + "/" + generateShortID(),
+		Result: shortURL,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
