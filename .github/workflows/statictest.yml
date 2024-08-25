@@ -1,38 +1,33 @@
-name: Release
+name: go vet test
 
 on:
+  pull_request:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 jobs:
-
-  release:
+  statictest:
     runs-on: ubuntu-latest
     container: golang:1.23
-    permissions:
-      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Cache deps
-        uses: actions/cache@v2
+      - name: Download statictest binary
+        uses: robinraju/release-downloader@v1.8
         with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          repository: Yandex-Practicum/go-autotests
+          latest: true
+          fileName: statictest
+          out-file-path: .tools
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Vet
+      - name: Setup autotest binary
         run: |
-          go vet ./...
+          chmod -R +x $GITHUB_WORKSPACE/.tools/statictest
+          mv $GITHUB_WORKSPACE/.tools/statictest /usr/local/bin/statictest
 
-      - name: Compile all
+      - name: Run statictest
         run: |
-          make all
-
-      - name: Release artifacts
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: "bin/*"
+          go vet -vettool=$(which statictest) ./...
