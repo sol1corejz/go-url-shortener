@@ -77,6 +77,10 @@ func handleJSONPost(w http.ResponseWriter, r *http.Request) {
 		Result: shortURL,
 	}
 
+	mu.Lock()
+	urlStore[shortID] = req.URL
+	mu.Unlock()
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
