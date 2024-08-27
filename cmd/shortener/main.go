@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
+	"github.com/sol1corejz/go-url-shortener/cmd/gzip"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
 	"go.uber.org/zap"
@@ -120,6 +121,34 @@ func main() {
 	}
 }
 
+func gzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ow := w
+
+		acceptEncoding := r.Header.Get("Accept-Encoding")
+		supportsGzip := strings.Contains(acceptEncoding, "gzip")
+		if supportsGzip {
+			cw := gzip.NewCompressWriter(w)
+			ow = cw
+			defer cw.Close()
+		}
+
+		contentEncoding := r.Header.Get("Content-Encoding")
+		sendsGzip := strings.Contains(contentEncoding, "gzip")
+		if sendsGzip {
+			cr, err := gzip.NewCompressReader(r.Body)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			r.Body = cr
+			defer cr.Close()
+		}
+
+		h.ServeHTTP(ow, r)
+	}
+}
+
 func run() error {
 	if err := logger.Initialize(config.FlagLogLevel); err != nil {
 		return err
@@ -129,9 +158,9 @@ func run() error {
 
 	r := chi.NewRouter()
 
-	r.Post("/", logger.RequestLogger(handlePost))
-	r.Get("/{shortURL}", logger.RequestLogger(handleGet))
-	r.Post("/api/shorten", logger.RequestLogger(handleJSONPost))
+	r.Post("/", logger.RequestLogger(gzipMiddleware(handlePost)))
+	r.Get("/{shortURL}", logger.RequestLogger(gzipMiddleware(handleGet)))
+	r.Post("/api/shorten", logger.RequestLogger(gzipMiddleware(handleJSONPost)))
 
 	return http.ListenAndServe(config.FlagRunAddr, r)
 }

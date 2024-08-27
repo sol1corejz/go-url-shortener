@@ -2,8 +2,11 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
+	"fmt"
 	"github.com/go-chi/chi/v5"
+	"github.com/sol1corejz/go-url-shortener/cmd/config"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
 	"io"
 	"net/http"
@@ -199,4 +202,75 @@ func Test_handleJSONPost(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGzipCompression(t *testing.T) {
+
+	config.FlagBaseURL = "http://localhost:8080"
+	r := chi.NewRouter()
+	r.Post("/api/shorten", gzipMiddleware(handleJSONPost))
+
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	requestBody := `{"url": "https://yypo2q5oco9.net"}`
+
+	t.Run("sends_gzip", func(t *testing.T) {
+		buf := bytes.NewBuffer(nil)
+		zb := gzip.NewWriter(buf)
+
+		_, err := zb.Write([]byte(requestBody))
+		require.NoError(t, err)
+
+		err = zb.Close()
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/shorten", buf)
+
+		req.RequestURI = ""
+		req.Header.Set("Content-Encoding", "gzip")
+		req.Header.Set("Accept-Encoding", "")
+
+		rr := httptest.NewRecorder()
+
+		handler := gzipMiddleware(handleJSONPost)
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code == http.StatusCreated {
+			var resp models.Response
+			err := json.Unmarshal(rr.Body.Bytes(), &resp)
+			assert.NoError(t, err)
+			assert.NotEmpty(t, resp.Result)
+		} else {
+			assert.Equal(t, rr.Body.String(), "Empty URL\n")
+		}
+	})
+
+	t.Run("accepts_gzip", func(t *testing.T) {
+		buf := bytes.NewBufferString(requestBody)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/shorten", buf)
+
+		req.RequestURI = ""
+		req.Header.Set("Accept-Encoding", "gzip")
+
+		rr := httptest.NewRecorder()
+
+		handler := gzipMiddleware(handleJSONPost)
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code == http.StatusCreated {
+
+			zresp, err := gzip.NewReader(rr.Body)
+			require.NoError(t, err)
+
+			res, err := io.ReadAll(zresp)
+
+			fmt.Println(string(res))
+
+			assert.NotEmpty(t, res)
+		} else {
+			assert.Equal(t, rr.Body.String(), "Empty URL\n")
+		}
+	})
 }
