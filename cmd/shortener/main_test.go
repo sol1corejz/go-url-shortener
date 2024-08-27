@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
-	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
@@ -265,9 +264,7 @@ func TestGzipCompression(t *testing.T) {
 			require.NoError(t, err)
 
 			res, err := io.ReadAll(zresp)
-
-			fmt.Println(string(res))
-
+			require.NoError(t, err)
 			assert.NotEmpty(t, res)
 		} else {
 			assert.Equal(t, rr.Body.String(), "Empty URL\n")
