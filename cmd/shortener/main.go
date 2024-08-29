@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
 	"github.com/sol1corejz/go-url-shortener/cmd/gzip"
+	"github.com/sol1corejz/go-url-shortener/internal/file"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
 	"go.uber.org/zap"
@@ -19,8 +21,37 @@ import (
 
 var (
 	urlStore = make(map[string]string)
+	urls     []file.Event
 	mu       sync.Mutex
 )
+
+func loadURLs() error {
+	consumer, err := file.NewConsumer(config.FileStoragePath)
+	if err != nil {
+		return err
+	}
+	defer consumer.File.Close()
+
+	for {
+		event, err := consumer.ReadEvent()
+		if err != nil {
+			break
+		}
+		urls = append(urls, *event)
+	}
+
+	return nil
+}
+
+func saveURL(event *file.Event) error {
+	producer, err := file.NewProducer(config.FileStoragePath)
+	if err != nil {
+		return err
+	}
+	defer producer.File.Close()
+
+	return producer.WriteEvent(event)
+}
 
 func generateShortID() string {
 	b := make([]byte, 6)
@@ -47,6 +78,22 @@ func handlePost(w http.ResponseWriter, r *http.Request) {
 
 	shortID := generateShortID()
 	shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
+
+	event := file.Event{
+		OriginalURL: originalURL,
+		ShortURL:    shortURL,
+		UUID:        uuid.New().String(),
+	}
+
+	mu.Lock()
+	urls = append(urls, event)
+	mu.Unlock()
+
+	err = saveURL(&event)
+	if err != nil {
+		http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
+		return
+	}
 
 	mu.Lock()
 	urlStore[shortID] = originalURL
@@ -76,6 +123,22 @@ func handleJSONPost(w http.ResponseWriter, r *http.Request) {
 
 	resp := models.Response{
 		Result: shortURL,
+	}
+
+	event := file.Event{
+		OriginalURL: req.URL,
+		ShortURL:    shortURL,
+		UUID:        uuid.New().String(),
+	}
+
+	mu.Lock()
+	urls = append(urls, event)
+	mu.Unlock()
+
+	errSave := saveURL(&event)
+	if errSave != nil {
+		http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
+		return
 	}
 
 	mu.Lock()
@@ -115,6 +178,11 @@ func handleGet(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	config.ParseFlags()
+
+	err := loadURLs()
+	if err != nil {
+		logger.Log.Fatal("Failed to load URLs from file: ", zap.String("file", config.DefaultFilePath))
+	}
 
 	if err := run(); err != nil {
 		panic(err)
