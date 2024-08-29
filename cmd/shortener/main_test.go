@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -30,6 +31,16 @@ func testRequest(t *testing.T, ts *httptest.Server, method,
 	require.NoError(t, err)
 
 	return resp, string(respBody)
+}
+
+func initFile(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_file_*.json")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	config.FileStoragePath = tmpFile.Name()
 }
 
 func Test_handlePost(t *testing.T) {
@@ -62,6 +73,9 @@ func Test_handlePost(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+
+			initFile(t)
+
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.inputURL))
 			w := httptest.NewRecorder()
 
@@ -171,6 +185,9 @@ func Test_handleJSONPost(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+
+			initFile(t)
+
 			r := chi.NewRouter()
 			r.Post("/api/shorten", handleJSONPost)
 			r.Get("/{shortURL}", handleGet)
