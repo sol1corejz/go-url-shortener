@@ -2,11 +2,13 @@ package main
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
 	"github.com/sol1corejz/go-url-shortener/cmd/gzip"
 	"github.com/sol1corejz/go-url-shortener/internal/file"
@@ -23,6 +25,7 @@ var (
 	urlStore = make(map[string]string)
 	urls     []file.Event
 	mu       sync.Mutex
+	db       *sql.DB
 )
 
 func loadURLs() error {
@@ -176,10 +179,31 @@ func handleGet(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
+func handlePing(w http.ResponseWriter, r *http.Request) {
+	if err := db.Ping(); err != nil {
+		logger.Log.Error("Error pinging the database: %v\n", zap.String("err", err.Error()))
+		http.Error(w, "Database connection error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("pong"))
+}
+
 func main() {
 	config.ParseFlags()
 
-	err := loadURLs()
+	ps := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable",
+		`localhost`, `postgres`, `12345678`, `urls`)
+
+	var err error
+	db, err = sql.Open("pgx", ps)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	err = loadURLs()
 	if err != nil {
 		logger.Log.Fatal("Failed to load URLs from file: ", zap.String("file", config.DefaultFilePath))
 	}
@@ -229,6 +253,7 @@ func run() error {
 	r.Post("/", logger.RequestLogger(gzipMiddleware(handlePost)))
 	r.Get("/{shortURL}", logger.RequestLogger(gzipMiddleware(handleGet)))
 	r.Post("/api/shorten", logger.RequestLogger(gzipMiddleware(handleJSONPost)))
+	r.Get("/ping", logger.RequestLogger(handlePing))
 
 	return http.ListenAndServe(config.FlagRunAddr, r)
 }
