@@ -181,7 +181,6 @@ func handleGet(w http.ResponseWriter, r *http.Request) {
 
 func handlePing(w http.ResponseWriter, r *http.Request) {
 	if err := db.Ping(); err != nil {
-		logger.Log.Error("Error pinging the database: %v\n", zap.String("err", err.Error()))
 		http.Error(w, "Database connection error", http.StatusInternalServerError)
 		return
 	}
@@ -193,11 +192,8 @@ func handlePing(w http.ResponseWriter, r *http.Request) {
 func main() {
 	config.ParseFlags()
 
-	ps := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable",
-		config.DatabaseDSN, `postgres`, `12345678`, `urls`)
-
 	var err error
-	db, err = sql.Open("pgx", ps)
+	db, err = sql.Open("pgx", config.DatabaseDSN)
 	if err != nil {
 		panic(err)
 	}

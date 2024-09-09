@@ -12,7 +12,7 @@ var (
 	FileStoragePath string
 	DefaultFilePath = "urls.json"
 	DatabaseDSN     string
-	DefaultDBDSN    = "localhost"
+	DefaultDBDSN    = "host=5432 user=postgres password=12345678 dbname=urls sslmode=disable"
 )
 
 func ParseFlags() {
