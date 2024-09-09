@@ -12,7 +12,7 @@ var (
 	FileStoragePath string
 	DefaultFilePath = "urls.json"
 	DatabaseDSN     string
-	DefaultDbDSN    = "localhost"
+	DefaultDBDSN    = "localhost"
 )
 
 func ParseFlags() {
@@ -45,6 +45,6 @@ func ParseFlags() {
 	}
 
 	if DatabaseDSN == "" {
-		DatabaseDSN = DefaultDbDSN
+		DatabaseDSN = DefaultDBDSN
 	}
 }
