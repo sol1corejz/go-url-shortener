@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"github.com/go-chi/chi/v5"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
+	"github.com/sol1corejz/go-url-shortener/internal/handlers"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
+	"github.com/sol1corejz/go-url-shortener/internal/storage"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -79,7 +81,7 @@ func Test_handlePost(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.inputURL))
 			w := httptest.NewRecorder()
 
-			handlePost(w, req)
+			handlers.HandlePost(w, req)
 
 			res := w.Result()
 			defer res.Body.Close()
@@ -105,13 +107,13 @@ func Test_handlePost(t *testing.T) {
 
 func Test_handleGet(t *testing.T) {
 	r := chi.NewRouter()
-	r.Get("/{shortURL}", handleGet)
+	r.Get("/{shortURL}", handlers.HandleGet)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
-	mu.Lock()
-	urlStore["abc123"] = "https://www.google.com"
-	mu.Unlock()
+	storage.Mu.Lock()
+	storage.UrlStore["abc123"] = "https://www.google.com"
+	storage.Mu.Unlock()
 
 	type want struct {
 		code     int
@@ -189,8 +191,8 @@ func Test_handleJSONPost(t *testing.T) {
 			initFile(t)
 
 			r := chi.NewRouter()
-			r.Post("/api/shorten", handleJSONPost)
-			r.Get("/{shortURL}", handleGet)
+			r.Post("/api/shorten", handlers.HandleJSONPost)
+			r.Get("/{shortURL}", handlers.HandleGet)
 
 			ts := httptest.NewServer(r)
 			defer ts.Close()
@@ -201,7 +203,7 @@ func Test_handleJSONPost(t *testing.T) {
 
 			rr := httptest.NewRecorder()
 
-			handler := http.HandlerFunc(handleJSONPost)
+			handler := http.HandlerFunc(handlers.HandleJSONPost)
 			handler.ServeHTTP(rr, req)
 
 			assert.Equal(t, test.want.code, rr.Code)
@@ -224,7 +226,7 @@ func TestGzipCompression(t *testing.T) {
 
 	config.FlagBaseURL = "http://localhost:8080"
 	r := chi.NewRouter()
-	r.Post("/api/shorten", gzipMiddleware(handleJSONPost))
+	r.Post("/api/shorten", gzipMiddleware(handlers.HandleJSONPost))
 
 	ts := httptest.NewServer(r)
 	defer ts.Close()
@@ -249,7 +251,7 @@ func TestGzipCompression(t *testing.T) {
 
 		rr := httptest.NewRecorder()
 
-		handler := gzipMiddleware(handleJSONPost)
+		handler := gzipMiddleware(handlers.HandleJSONPost)
 		handler.ServeHTTP(rr, req)
 
 		if rr.Code == http.StatusCreated {
@@ -272,7 +274,7 @@ func TestGzipCompression(t *testing.T) {
 
 		rr := httptest.NewRecorder()
 
-		handler := gzipMiddleware(handleJSONPost)
+		handler := gzipMiddleware(handlers.HandleJSONPost)
 		handler.ServeHTTP(rr, req)
 
 		if rr.Code == http.StatusCreated {
