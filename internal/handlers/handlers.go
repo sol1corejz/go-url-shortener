@@ -51,7 +51,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	storage.Mu.Lock()
-	storage.Urls = append(storage.Urls, event)
+	storage.URLs = append(storage.URLs, event)
 	storage.Mu.Unlock()
 
 	err = storage.SaveURL(&event)
@@ -61,7 +61,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	storage.Mu.Lock()
-	storage.UrlStore[shortID] = originalURL
+	storage.URLStore[shortID] = originalURL
 	storage.Mu.Unlock()
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -97,7 +97,7 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	storage.Mu.Lock()
-	storage.Urls = append(storage.Urls, event)
+	storage.URLs = append(storage.URLs, event)
 	storage.Mu.Unlock()
 
 	errSave := storage.SaveURL(&event)
@@ -107,7 +107,7 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	storage.Mu.Lock()
-	storage.UrlStore[shortID] = req.URL
+	storage.URLStore[shortID] = req.URL
 	storage.Mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -129,7 +129,7 @@ func HandleGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	storage.Mu.Lock()
-	originalURL, ok := storage.UrlStore[id]
+	originalURL, ok := storage.URLStore[id]
 	storage.Mu.Unlock()
 
 	if !ok {

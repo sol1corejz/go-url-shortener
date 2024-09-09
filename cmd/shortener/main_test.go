@@ -112,7 +112,7 @@ func Test_handleGet(t *testing.T) {
 	defer ts.Close()
 
 	storage.Mu.Lock()
-	storage.UrlStore["abc123"] = "https://www.google.com"
+	storage.URLStore["abc123"] = "https://www.google.com"
 	storage.Mu.Unlock()
 
 	type want struct {

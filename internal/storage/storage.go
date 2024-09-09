@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	UrlStore = make(map[string]string)
-	Urls     []file.Event
+	URLStore = make(map[string]string)
+	URLs     []file.Event
 	Mu       sync.Mutex
 	DB       *sql.DB
 )
@@ -26,7 +26,7 @@ func LoadURLs() error {
 		if err != nil {
 			break
 		}
-		Urls = append(Urls, *event)
+		URLs = append(URLs, *event)
 	}
 
 	return nil
