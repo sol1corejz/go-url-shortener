@@ -194,7 +194,7 @@ func main() {
 	config.ParseFlags()
 
 	ps := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable",
-		`localhost`, `postgres`, `12345678`, `urls`)
+		config.DatabaseDSN, `postgres`, `12345678`, `urls`)
 
 	var err error
 	db, err = sql.Open("pgx", ps)
