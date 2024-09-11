@@ -11,7 +11,6 @@ var (
 	FlagLogLevel    string
 	FileStoragePath string
 	DatabaseDSN     string
-	DefaultFilePath = "urls.json"
 )
 
 func ParseFlags() {
@@ -37,9 +36,5 @@ func ParseFlags() {
 
 	if databaseDsn := os.Getenv("DATABASE_DSN"); databaseDsn != "" {
 		DatabaseDSN = databaseDsn
-	}
-
-	if FileStoragePath == "" {
-		FileStoragePath = DefaultFilePath
 	}
 }
