@@ -83,7 +83,7 @@ func (h *Handler) HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shortID := generateShortID()
-	shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
+	shortURL := fmt.Sprintf("%s", shortID)
 
 	resp := models.Response{
 		Result: shortURL,
