@@ -83,7 +83,7 @@ func (h *Handler) HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shortID := generateShortID()
-	shortURL := fmt.Sprintf("%s", shortID)
+	shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
 
 	resp := models.Response{
 		Result: shortURL,
@@ -112,13 +112,14 @@ func (h *Handler) HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "shortURL")
-	if id == "" {
+	shortURL := chi.URLParam(r, "shortURL")
+	if shortURL == "" {
 		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
 		return
 	}
 
-	originalURL, err := h.store.Get(id)
+	originalURL, err := h.store.Get(shortURL)
+	fmt.Println(originalURL)
 	if err != nil {
 		http.Error(w, "URL not found", http.StatusNotFound)
 		return
