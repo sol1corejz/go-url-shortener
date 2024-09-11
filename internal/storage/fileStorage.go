@@ -11,13 +11,13 @@ import (
 type FileStorage struct {
 	filename string
 	mu       sync.Mutex
-	data     map[string]string
+	data     []models.URLData
 }
 
 func NewFileStorage(filename string) (*FileStorage, error) {
 	fs := &FileStorage{
 		filename: filename,
-		data:     make(map[string]string),
+		data:     make([]models.URLData, 0),
 	}
 
 	file, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0666)
@@ -34,12 +34,7 @@ func NewFileStorage(filename string) (*FileStorage, error) {
 	return fs, nil
 }
 
-func (fs *FileStorage) Save(data models.URLData) error {
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-
-	fs.data[data.ShortURL] = data.OriginalURL
-
+func (fs *FileStorage) saveToFile() error {
 	file, err := os.OpenFile(fs.filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		return err
@@ -54,15 +49,37 @@ func (fs *FileStorage) Save(data models.URLData) error {
 	return nil
 }
 
+func (fs *FileStorage) Save(data models.URLData) error {
+	fs.mu.Lock()
+	urlData := models.URLData{
+		UUID:        data.UUID,
+		ShortURL:    data.ShortURL,
+		OriginalURL: data.OriginalURL,
+	}
+	defer fs.mu.Unlock()
+
+	for i, d := range fs.data {
+		if d.ShortURL == urlData.ShortURL {
+			fs.data[i] = urlData
+			return fs.saveToFile()
+		}
+	}
+
+	fs.data = append(fs.data, urlData)
+	return fs.saveToFile()
+}
+
 func (fs *FileStorage) Get(shortID string) (string, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	originalURL, ok := fs.data[shortID]
-	if !ok {
-		return "", fmt.Errorf("URL not found")
+	for _, d := range fs.data {
+		if d.ShortURL == shortID {
+			return d.OriginalURL, nil
+		}
 	}
-	return originalURL, nil
+
+	return "", fmt.Errorf("URL not found")
 }
 
 func (fs *FileStorage) Ping() error {
