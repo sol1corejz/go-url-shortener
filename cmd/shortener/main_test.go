@@ -1,10 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
 	"github.com/go-chi/chi/v5"
+	"github.com/sol1corejz/go-url-shortener/cmd/config"
+	"github.com/sol1corejz/go-url-shortener/internal/models"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -25,6 +31,16 @@ func testRequest(t *testing.T, ts *httptest.Server, method,
 	require.NoError(t, err)
 
 	return resp, string(respBody)
+}
+
+func initFile(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_file_*.json")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	config.FileStoragePath = tmpFile.Name()
 }
 
 func Test_handlePost(t *testing.T) {
@@ -57,6 +73,9 @@ func Test_handlePost(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+
+			initFile(t)
+
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.inputURL))
 			w := httptest.NewRecorder()
 
@@ -127,4 +146,145 @@ func Test_handleGet(t *testing.T) {
 			assert.Equal(t, test.want.code, resp.StatusCode)
 		})
 	}
+}
+
+func Test_handleJSONPost(t *testing.T) {
+	type want struct {
+		code        int
+		contentType string
+		result      models.Response
+	}
+	tests := []struct {
+		name    string
+		reqBody models.Request
+		want    want
+	}{
+		{
+			name: "Valid request",
+			reqBody: models.Request{
+				URL: "https://practicum.yandex.ru",
+			},
+			want: want{
+				code:        http.StatusCreated,
+				contentType: "application/json",
+				result:      models.Response{},
+			},
+		},
+		{
+			name: "Invalid JSON",
+			reqBody: models.Request{
+				URL: "",
+			},
+			want: want{
+				code:        http.StatusBadRequest,
+				contentType: "text/plain; charset=utf-8",
+				result:      models.Response{},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+
+			initFile(t)
+
+			r := chi.NewRouter()
+			r.Post("/api/shorten", handleJSONPost)
+			r.Get("/{shortURL}", handleGet)
+
+			ts := httptest.NewServer(r)
+			defer ts.Close()
+
+			reqBodyJSON, _ := json.Marshal(test.reqBody)
+			req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBuffer(reqBodyJSON))
+			req.Header.Set("Content-Type", "application/json")
+
+			rr := httptest.NewRecorder()
+
+			handler := http.HandlerFunc(handleJSONPost)
+			handler.ServeHTTP(rr, req)
+
+			assert.Equal(t, test.want.code, rr.Code)
+
+			assert.Equal(t, test.want.contentType, rr.Header().Get("Content-Type"))
+
+			if test.want.code == http.StatusCreated {
+				var resp models.Response
+				err := json.Unmarshal(rr.Body.Bytes(), &resp)
+				assert.NoError(t, err)
+				assert.NotEmpty(t, resp.Result)
+			} else {
+				assert.Equal(t, rr.Body.String(), "Empty URL\n")
+			}
+		})
+	}
+}
+
+func TestGzipCompression(t *testing.T) {
+
+	config.FlagBaseURL = "http://localhost:8080"
+	r := chi.NewRouter()
+	r.Post("/api/shorten", gzipMiddleware(handleJSONPost))
+
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	requestBody := `{"url": "https://yypo2q5oco9.net"}`
+
+	t.Run("sends_gzip", func(t *testing.T) {
+		buf := bytes.NewBuffer(nil)
+		zb := gzip.NewWriter(buf)
+
+		_, err := zb.Write([]byte(requestBody))
+		require.NoError(t, err)
+
+		err = zb.Close()
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/shorten", buf)
+
+		req.RequestURI = ""
+		req.Header.Set("Content-Encoding", "gzip")
+		req.Header.Set("Accept-Encoding", "")
+
+		rr := httptest.NewRecorder()
+
+		handler := gzipMiddleware(handleJSONPost)
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code == http.StatusCreated {
+			var resp models.Response
+			err := json.Unmarshal(rr.Body.Bytes(), &resp)
+			assert.NoError(t, err)
+			assert.NotEmpty(t, resp.Result)
+		} else {
+			assert.Equal(t, rr.Body.String(), "Empty URL\n")
+		}
+	})
+
+	t.Run("accepts_gzip", func(t *testing.T) {
+		buf := bytes.NewBufferString(requestBody)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/shorten", buf)
+
+		req.RequestURI = ""
+		req.Header.Set("Accept-Encoding", "gzip")
+
+		rr := httptest.NewRecorder()
+
+		handler := gzipMiddleware(handleJSONPost)
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code == http.StatusCreated {
+
+			zresp, err := gzip.NewReader(rr.Body)
+			require.NoError(t, err)
+
+			res, err := io.ReadAll(zresp)
+			require.NoError(t, err)
+			assert.NotEmpty(t, res)
+		} else {
+			assert.Equal(t, rr.Body.String(), "Empty URL\n")
+		}
+	})
 }

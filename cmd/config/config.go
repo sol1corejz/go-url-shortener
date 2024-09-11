@@ -6,14 +6,19 @@ import (
 )
 
 var (
-	FlagRunAddr string
-	FlagBaseURL string
+	FlagRunAddr     string
+	FlagBaseURL     string
+	FlagLogLevel    string
+	FileStoragePath string
+	DefaultFilePath = "urls.json"
 )
 
 func ParseFlags() {
 
 	flag.StringVar(&FlagRunAddr, "a", ":8080", "address and port to run server")
 	flag.StringVar(&FlagBaseURL, "b", "http://localhost:8080", "base URL for shortened links")
+	flag.StringVar(&FlagLogLevel, "l", "info", "log level")
+	flag.StringVar(&FileStoragePath, "f", "", "file storage path")
 	flag.Parse()
 
 	if envRunAddr := os.Getenv("SERVER_ADDRESS"); envRunAddr != "" {
@@ -22,5 +27,13 @@ func ParseFlags() {
 
 	if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
 		FlagBaseURL = envBaseURL
+	}
+
+	if envStoragePath := os.Getenv("FILE_STORAGE_PATH"); envStoragePath != "" {
+		FileStoragePath = envStoragePath
+	}
+
+	if FileStoragePath == "" {
+		FileStoragePath = DefaultFilePath
 	}
 }
