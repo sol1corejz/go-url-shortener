@@ -57,7 +57,7 @@ func run(h *handlers.Handler) error {
 		return err
 	}
 
-	logger.Log.Info("Running server", zap.String("address", config.FlagRunAddr))
+	logger.Log.Info("Running server", zap.String("port", config.FlagRunAddr), zap.String("address", config.FlagBaseURL))
 
 	r := chi.NewRouter()
 

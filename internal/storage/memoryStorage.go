@@ -3,6 +3,7 @@ package storage
 import (
 	"fmt"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
+	"strings"
 	"sync"
 )
 
@@ -20,7 +21,10 @@ func NewMemoryStorage() *MemoryStorage {
 func (ms *MemoryStorage) Save(data models.URLData) error {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
-	ms.data[data.ShortURL] = data.OriginalURL
+
+	shortID := data.ShortURL[strings.LastIndex(data.ShortURL, "/")+1:]
+
+	ms.data[shortID] = data.OriginalURL
 	return nil
 }
 

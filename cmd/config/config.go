@@ -15,7 +15,7 @@ var (
 
 func ParseFlags() {
 
-	flag.StringVar(&FlagRunAddr, "a", ":8080", "address and port to run server")
+	flag.StringVar(&FlagRunAddr, "a", ":8080", "port to run server")
 	flag.StringVar(&FlagBaseURL, "b", "http://localhost:8080", "base URL for shortened links")
 	flag.StringVar(&FlagLogLevel, "l", "info", "log level")
 	flag.StringVar(&FileStoragePath, "f", "", "file storage path")

@@ -91,7 +91,7 @@ func (h *Handler) HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 
 	event := models.URLData{
 		OriginalURL: req.URL,
-		ShortURL:    shortURL,
+		ShortURL:    shortID,
 		UUID:        uuid.New().String(),
 	}
 
