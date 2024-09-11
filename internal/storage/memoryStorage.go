@@ -28,8 +28,8 @@ func (ms *MemoryStorage) Save(data models.URLData) error {
 	return nil
 }
 
-func (s *MemoryStorage) Get(shortURL string) (string, error) {
-	originalURL, found := s.data[shortURL]
+func (ms *MemoryStorage) Get(shortURL string) (string, error) {
+	originalURL, found := ms.data[shortURL]
 	if !found {
 		return "", fmt.Errorf("not found")
 	}

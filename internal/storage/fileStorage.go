@@ -39,13 +39,19 @@ func (fs *FileStorage) Save(data models.URLData) error {
 	defer fs.mu.Unlock()
 
 	fs.data[data.ShortURL] = data.OriginalURL
+
 	file, err := os.OpenFile(fs.filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	return json.NewEncoder(file).Encode(fs.data)
+	err = json.NewEncoder(file).Encode(fs.data)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (fs *FileStorage) Get(shortID string) (string, error) {
