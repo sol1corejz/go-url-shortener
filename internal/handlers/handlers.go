@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
-	"github.com/sol1corejz/go-url-shortener/internal/file"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
 	"github.com/sol1corejz/go-url-shortener/internal/storage"
@@ -17,6 +16,14 @@ import (
 	"net/http"
 	"strings"
 )
+
+type Handler struct {
+	store storage.Storage
+}
+
+func NewHandler(store storage.Storage) *Handler {
+	return &Handler{store: store}
+}
 
 func generateShortID() string {
 	b := make([]byte, 6)
@@ -27,7 +34,7 @@ func generateShortID() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-func HandlePost(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandlePost(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
@@ -44,32 +51,24 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 	shortID := generateShortID()
 	shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
 
-	event := file.Event{
+	event := models.URLData{
 		OriginalURL: originalURL,
 		ShortURL:    shortURL,
 		UUID:        uuid.New().String(),
 	}
 
-	storage.Mu.Lock()
-	storage.URLs = append(storage.URLs, event)
-	storage.Mu.Unlock()
-
-	err = storage.SaveURL(&event)
+	err = h.store.Save(event)
 	if err != nil {
-		http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
+		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
 		return
 	}
-
-	storage.Mu.Lock()
-	storage.URLStore[shortID] = originalURL
-	storage.Mu.Unlock()
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(shortURL))
 }
 
-func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 	var req models.Request
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&req); err != nil {
@@ -90,25 +89,17 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		Result: shortURL,
 	}
 
-	event := file.Event{
+	event := models.URLData{
 		OriginalURL: req.URL,
 		ShortURL:    shortURL,
 		UUID:        uuid.New().String(),
 	}
 
-	storage.Mu.Lock()
-	storage.URLs = append(storage.URLs, event)
-	storage.Mu.Unlock()
-
-	errSave := storage.SaveURL(&event)
-	if errSave != nil {
-		http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
+	err := h.store.Save(event)
+	if err != nil {
+		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
 		return
 	}
-
-	storage.Mu.Lock()
-	storage.URLStore[shortID] = req.URL
-	storage.Mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -118,22 +109,18 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		logger.Log.Debug("error encoding response", zap.Error(err))
 		return
 	}
-
 }
 
-func HandleGet(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "shortURL")
 	if id == "" {
 		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
 		return
 	}
 
-	storage.Mu.Lock()
-	originalURL, ok := storage.URLStore[id]
-	storage.Mu.Unlock()
-
-	if !ok {
-		http.Error(w, "URL not found", http.StatusBadRequest)
+	originalURL, err := h.store.Get(id)
+	if err != nil {
+		http.Error(w, "URL not found", http.StatusNotFound)
 		return
 	}
 
@@ -141,8 +128,8 @@ func HandleGet(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
-func HandlePing(w http.ResponseWriter, r *http.Request) {
-	if err := storage.DB.Ping(); err != nil {
+func (h *Handler) HandlePing(w http.ResponseWriter, r *http.Request) {
+	if err := h.store.Ping(); err != nil {
 		http.Error(w, "Database connection error", http.StatusInternalServerError)
 		return
 	}

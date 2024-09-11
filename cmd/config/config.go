@@ -10,9 +10,7 @@ var (
 	FlagBaseURL     string
 	FlagLogLevel    string
 	FileStoragePath string
-	DefaultFilePath = "urls.json"
 	DatabaseDSN     string
-	DefaultDBDSN    = "host=5432 user=postgres password=12345678 dbname=urls sslmode=disable"
 )
 
 func ParseFlags() {
@@ -38,13 +36,5 @@ func ParseFlags() {
 
 	if databaseDsn := os.Getenv("DATABASE_DSN"); databaseDsn != "" {
 		DatabaseDSN = databaseDsn
-	}
-
-	if FileStoragePath == "" {
-		FileStoragePath = DefaultFilePath
-	}
-
-	if DatabaseDSN == "" {
-		DatabaseDSN = DefaultDBDSN
 	}
 }

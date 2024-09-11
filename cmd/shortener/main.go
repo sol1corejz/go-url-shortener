@@ -1,69 +1,58 @@
 package main
 
 import (
-	"database/sql"
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
-	"github.com/sol1corejz/go-url-shortener/cmd/gzip"
 	"github.com/sol1corejz/go-url-shortener/internal/handlers"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/middlewares"
 	"github.com/sol1corejz/go-url-shortener/internal/storage"
 	"go.uber.org/zap"
+	"log"
 	"net/http"
-	"strings"
 )
 
 func main() {
 	config.ParseFlags()
 
+	store, err := initStorage()
+	if err != nil {
+		log.Fatalf("Error initializing storage: %v", err)
+	}
+
+	h := handlers.NewHandler(store)
+
+	if err := run(h); err != nil {
+		panic(err)
+	}
+}
+
+func initStorage() (storage.Storage, error) {
+	var store storage.Storage
 	var err error
-	storage.DB, err = sql.Open("pgx", config.DatabaseDSN)
-	if err != nil {
-		panic(err)
-	}
-	defer storage.DB.Close()
 
-	err = storage.LoadURLs()
-	if err != nil {
-		logger.Log.Fatal("Failed to load URLs from file: ", zap.String("file", config.DefaultFilePath))
+	if config.DatabaseDSN != "" {
+		store, err = storage.NewPostgresStorage(config.DatabaseDSN)
+		if err != nil {
+			return nil, err
+		}
+		log.Println("Using PostgreSQL as storage")
+	} else if config.FileStoragePath != "" {
+		store, err = storage.NewFileStorage(config.FileStoragePath)
+		if err != nil {
+			return nil, err
+		}
+		log.Println("Using file storage")
+	} else {
+		store = storage.NewMemoryStorage()
+		log.Println("Using in-memory storage")
 	}
 
-	if err := run(); err != nil {
-		panic(err)
-	}
+	return store, nil
 }
 
-func gzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ow := w
-
-		acceptEncoding := r.Header.Get("Accept-Encoding")
-		supportsGzip := strings.Contains(acceptEncoding, "gzip")
-		if supportsGzip {
-			cw := gzip.NewCompressWriter(w)
-			ow = cw
-			defer cw.Close()
-		}
-
-		contentEncoding := r.Header.Get("Content-Encoding")
-		sendsGzip := strings.Contains(contentEncoding, "gzip")
-		if sendsGzip {
-			cr, err := gzip.NewCompressReader(r.Body)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			r.Body = cr
-			defer cr.Close()
-		}
-
-		h.ServeHTTP(ow, r)
-	}
-}
-
-func run() error {
+func run(h *handlers.Handler) error {
 	if err := logger.Initialize(config.FlagLogLevel); err != nil {
 		return err
 	}
@@ -72,10 +61,10 @@ func run() error {
 
 	r := chi.NewRouter()
 
-	r.Post("/", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandlePost)))
-	r.Get("/{shortURL}", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleGet)))
-	r.Post("/api/shorten", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleJSONPost)))
-	r.Get("/ping", logger.RequestLogger(handlers.HandlePing))
+	r.Post("/", logger.RequestLogger(middlewares.GzipMiddleware(h.HandlePost)))
+	r.Get("/{shortURL}", logger.RequestLogger(middlewares.GzipMiddleware(h.HandleGet)))
+	r.Post("/api/shorten", logger.RequestLogger(middlewares.GzipMiddleware(h.HandleJSONPost)))
+	r.Get("/ping", logger.RequestLogger(h.HandlePing))
 
 	return http.ListenAndServe(config.FlagRunAddr, r)
 }

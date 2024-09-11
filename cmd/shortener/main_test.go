@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
 	"github.com/sol1corejz/go-url-shortener/internal/handlers"
+	"github.com/sol1corejz/go-url-shortener/internal/middlewares"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
 	"github.com/sol1corejz/go-url-shortener/internal/storage"
 	"io"
@@ -20,8 +21,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func testRequest(t *testing.T, ts *httptest.Server, method,
-	path string) (*http.Response, string) {
+func initStorageForTests(t *testing.T, storageType string) storage.Storage {
+	var store storage.Storage
+	var err error
+
+	switch storageType {
+	case "postgres":
+		dsn := "your_postgres_dsn"
+		store, err = storage.NewPostgresStorage(dsn)
+		require.NoError(t, err)
+	case "file":
+		tmpFile, err := os.CreateTemp("", "test_file_*.json")
+		require.NoError(t, err)
+		t.Cleanup(func() { os.Remove(tmpFile.Name()) })
+		store, err = storage.NewFileStorage(tmpFile.Name())
+		require.NoError(t, err)
+	case "memory":
+		store = storage.NewMemoryStorage()
+	default:
+		t.Fatalf("Invalid storage type: %s", storageType)
+	}
+
+	return store
+}
+
+func testRequest(t *testing.T, ts *httptest.Server, method, path string) (*http.Response, string) {
 	req, err := http.NewRequest(method, ts.URL+path, nil)
 	require.NoError(t, err)
 
@@ -51,21 +75,24 @@ func Test_handlePost(t *testing.T) {
 		contentType string
 	}
 	tests := []struct {
-		name     string
-		inputURL string
-		want     want
+		name        string
+		inputURL    string
+		storageType string
+		want        want
 	}{
 		{
-			name:     "Test correct URL",
-			inputURL: "https://www.google.com",
+			name:        "Test correct URL with memory storage",
+			inputURL:    "https://www.google.com",
+			storageType: "memory",
 			want: want{
 				code:        http.StatusCreated,
 				contentType: "text/plain; charset=utf-8",
 			},
 		},
 		{
-			name:     "Test empty URL",
-			inputURL: "",
+			name:        "Test empty URL with file storage",
+			inputURL:    "",
+			storageType: "file",
 			want: want{
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
@@ -75,13 +102,13 @@ func Test_handlePost(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-
-			initFile(t)
+			store := initStorageForTests(t, test.storageType)
+			handler := handlers.NewHandler(store)
 
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.inputURL))
 			w := httptest.NewRecorder()
 
-			handlers.HandlePost(w, req)
+			handler.HandlePost(w, req)
 
 			res := w.Result()
 			defer res.Body.Close()
@@ -89,16 +116,12 @@ func Test_handlePost(t *testing.T) {
 			assert.Equal(t, test.want.code, res.StatusCode)
 
 			if test.want.code == http.StatusCreated {
-
 				resBody, err := io.ReadAll(res.Body)
-
 				require.NoError(t, err)
-
 				assert.Equal(t, test.want.contentType, res.Header.Get("Content-Type"))
 
 				shortURLs := strings.Split(string(resBody), "/")
 				shortURL := shortURLs[len(shortURLs)-1]
-
 				assert.Len(t, shortURL, 8)
 			}
 		})
@@ -106,43 +129,49 @@ func Test_handlePost(t *testing.T) {
 }
 
 func Test_handleGet(t *testing.T) {
-	r := chi.NewRouter()
-	r.Get("/{shortURL}", handlers.HandleGet)
-	ts := httptest.NewServer(r)
-	defer ts.Close()
-
-	storage.Mu.Lock()
-	storage.URLStore["abc123"] = "https://www.google.com"
-	storage.Mu.Unlock()
-
 	type want struct {
-		code     int
-		location string
+		code int
 	}
 	tests := []struct {
 		name         string
 		inputShortID string
+		storageType  string
 		want         want
 	}{
 		{
-			name:         "Test valid short URL",
+			name:         "Test valid short URL with memory storage",
 			inputShortID: "abc123",
+			storageType:  "memory",
 			want:         want{code: http.StatusOK},
 		},
 		{
-			name:         "Test invalid short URL",
+			name:         "Test invalid short URL with file storage",
 			inputShortID: "ab23",
-			want:         want{code: http.StatusBadRequest},
-		},
-		{
-			name:         "Test empty short URL",
-			inputShortID: "",
+			storageType:  "file",
 			want:         want{code: http.StatusNotFound},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			store := initStorageForTests(t, test.storageType)
+
+			if test.storageType != "file" {
+				store.Save(models.URLData{
+					ShortURL:    "abc123",
+					OriginalURL: "https://www.google.com",
+					UUID:        "test-uuid",
+				})
+			}
+
+			handler := handlers.NewHandler(store)
+
+			r := chi.NewRouter()
+			r.Get("/{shortURL}", handler.HandleGet)
+
+			ts := httptest.NewServer(r)
+			defer ts.Close()
+
 			resp, _ := testRequest(t, ts, "GET", "/"+test.inputShortID)
 			defer resp.Body.Close()
 			assert.Equal(t, test.want.code, resp.StatusCode)
@@ -157,15 +186,17 @@ func Test_handleJSONPost(t *testing.T) {
 		result      models.Response
 	}
 	tests := []struct {
-		name    string
-		reqBody models.Request
-		want    want
+		name        string
+		reqBody     models.Request
+		storageType string
+		want        want
 	}{
 		{
-			name: "Valid request",
+			name: "Valid request with memory storage",
 			reqBody: models.Request{
 				URL: "https://practicum.yandex.ru",
 			},
+			storageType: "memory",
 			want: want{
 				code:        http.StatusCreated,
 				contentType: "application/json",
@@ -173,10 +204,11 @@ func Test_handleJSONPost(t *testing.T) {
 			},
 		},
 		{
-			name: "Invalid JSON",
+			name: "Invalid JSON with file storage",
 			reqBody: models.Request{
 				URL: "",
 			},
+			storageType: "file",
 			want: want{
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
@@ -187,12 +219,11 @@ func Test_handleJSONPost(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-
-			initFile(t)
+			store := initStorageForTests(t, test.storageType)
+			handler := handlers.NewHandler(store)
 
 			r := chi.NewRouter()
-			r.Post("/api/shorten", handlers.HandleJSONPost)
-			r.Get("/{shortURL}", handlers.HandleGet)
+			r.Post("/api/shorten", handler.HandleJSONPost)
 
 			ts := httptest.NewServer(r)
 			defer ts.Close()
@@ -203,11 +234,9 @@ func Test_handleJSONPost(t *testing.T) {
 
 			rr := httptest.NewRecorder()
 
-			handler := http.HandlerFunc(handlers.HandleJSONPost)
-			handler.ServeHTTP(rr, req)
+			r.ServeHTTP(rr, req)
 
 			assert.Equal(t, test.want.code, rr.Code)
-
 			assert.Equal(t, test.want.contentType, rr.Header().Get("Content-Type"))
 
 			if test.want.code == http.StatusCreated {
@@ -223,10 +252,12 @@ func Test_handleJSONPost(t *testing.T) {
 }
 
 func TestGzipCompression(t *testing.T) {
+	store := initStorageForTests(t, "memory")
+	handler := handlers.NewHandler(store)
 
 	config.FlagBaseURL = "http://localhost:8080"
 	r := chi.NewRouter()
-	r.Post("/api/shorten", gzipMiddleware(handlers.HandleJSONPost))
+	r.Post("/api/shorten", middlewares.GzipMiddleware(handler.HandleJSONPost))
 
 	ts := httptest.NewServer(r)
 	defer ts.Close()
@@ -244,14 +275,12 @@ func TestGzipCompression(t *testing.T) {
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodPost, "/api/shorten", buf)
-
-		req.RequestURI = ""
 		req.Header.Set("Content-Encoding", "gzip")
 		req.Header.Set("Accept-Encoding", "")
 
 		rr := httptest.NewRecorder()
 
-		handler := gzipMiddleware(handlers.HandleJSONPost)
+		handler := middlewares.GzipMiddleware(handler.HandleJSONPost)
 		handler.ServeHTTP(rr, req)
 
 		if rr.Code == http.StatusCreated {
@@ -268,17 +297,14 @@ func TestGzipCompression(t *testing.T) {
 		buf := bytes.NewBufferString(requestBody)
 
 		req := httptest.NewRequest(http.MethodPost, "/api/shorten", buf)
-
-		req.RequestURI = ""
 		req.Header.Set("Accept-Encoding", "gzip")
 
 		rr := httptest.NewRecorder()
 
-		handler := gzipMiddleware(handlers.HandleJSONPost)
+		handler := middlewares.GzipMiddleware(handler.HandleJSONPost)
 		handler.ServeHTTP(rr, req)
 
 		if rr.Code == http.StatusCreated {
-
 			zresp, err := gzip.NewReader(rr.Body)
 			require.NoError(t, err)
 
