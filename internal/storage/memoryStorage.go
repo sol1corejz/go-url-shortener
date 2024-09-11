@@ -24,14 +24,12 @@ func (ms *MemoryStorage) Save(data models.URLData) error {
 	return nil
 }
 
-func (ms *MemoryStorage) Get(shortID string) (string, error) {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
-
-	originalURL, ok := ms.data[shortID]
-	if !ok {
-		return "", fmt.Errorf("URL not found")
+func (s *MemoryStorage) Get(shortURL string) (string, error) {
+	originalURL, found := s.data[shortURL]
+	if !found {
+		return "", fmt.Errorf("not found")
 	}
+
 	return originalURL, nil
 }
 
