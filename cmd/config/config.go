@@ -42,4 +42,5 @@ func ParseFlags() {
 	if FileStoragePath == "" {
 		FileStoragePath = DefaultFilePath
 	}
+	flag.Parse()
 }
