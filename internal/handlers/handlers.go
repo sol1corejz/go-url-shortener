@@ -114,19 +114,8 @@ func (h *Handler) HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 	shortURL := chi.URLParam(r, "shortURL")
 
-	if shortURL == "" {
-		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
-		return
-	}
-
-	originalURL, err := h.store.Get(strings.TrimSpace(shortURL))
-
+	originalURL, err := h.store.Get(shortURL)
 	if err != nil {
-		http.Error(w, "URL not found", http.StatusNotFound)
-		return
-	}
-
-	if originalURL == "" {
 		http.Error(w, "URL not found", http.StatusNotFound)
 		return
 	}
