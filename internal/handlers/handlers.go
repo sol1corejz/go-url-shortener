@@ -44,37 +44,39 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 	shortID := generateShortID()
 	shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
 
-	data := models.URLData{
-		UUID:        uuid.New().String(),
-		ShortURL:    shortURL,
-		OriginalURL: originalURL,
+	if config.DatabaseDSN != "" {
+		data := models.URLData{
+			UUID:        uuid.New().String(),
+			ShortURL:    shortURL,
+			OriginalURL: originalURL,
+		}
+
+		err = storage.Save(data)
+		if err != nil {
+			http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		event := file.Event{
+			OriginalURL: originalURL,
+			ShortURL:    shortID,
+			UUID:        uuid.New().String(),
+		}
+
+		storage.Mu.Lock()
+		storage.URLs = append(storage.URLs, event)
+		storage.Mu.Unlock()
+
+		err = storage.SaveURL(&event)
+		if err != nil {
+			http.Error(w, "Failed to save URL", http.StatusInternalServerError)
+			return
+		}
+
+		storage.Mu.Lock()
+		storage.URLStore[shortID] = originalURL
+		storage.Mu.Unlock()
 	}
-
-	err = storage.Save(data)
-	if err != nil {
-		http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
-		return
-	}
-
-	event := file.Event{
-		OriginalURL: originalURL,
-		ShortURL:    shortID,
-		UUID:        uuid.New().String(),
-	}
-
-	storage.Mu.Lock()
-	storage.URLs = append(storage.URLs, event)
-	storage.Mu.Unlock()
-
-	err = storage.SaveURL(&event)
-	if err != nil {
-		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
-		return
-	}
-
-	storage.Mu.Lock()
-	storage.URLStore[shortID] = originalURL
-	storage.Mu.Unlock()
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
@@ -102,37 +104,39 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		Result: shortURL,
 	}
 
-	data := models.URLData{
-		UUID:        uuid.New().String(),
-		ShortURL:    shortID,
-		OriginalURL: req.URL,
+	if config.DatabaseDSN != "" {
+		data := models.URLData{
+			UUID:        uuid.New().String(),
+			ShortURL:    shortID,
+			OriginalURL: req.URL,
+		}
+
+		err := storage.Save(data)
+		if err != nil {
+			http.Error(w, "Failed to save URL", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		event := file.Event{
+			OriginalURL: req.URL,
+			ShortURL:    shortID,
+			UUID:        uuid.New().String(),
+		}
+
+		storage.Mu.Lock()
+		storage.URLs = append(storage.URLs, event)
+		storage.Mu.Unlock()
+
+		errSave := storage.SaveURL(&event)
+		if errSave != nil {
+			http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
+			return
+		}
+
+		storage.Mu.Lock()
+		storage.URLStore[shortID] = req.URL
+		storage.Mu.Unlock()
 	}
-
-	err := storage.Save(data)
-	if err != nil {
-		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
-		return
-	}
-
-	event := file.Event{
-		OriginalURL: req.URL,
-		ShortURL:    shortID,
-		UUID:        uuid.New().String(),
-	}
-
-	storage.Mu.Lock()
-	storage.URLs = append(storage.URLs, event)
-	storage.Mu.Unlock()
-
-	errSave := storage.SaveURL(&event)
-	if errSave != nil {
-		http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
-		return
-	}
-
-	storage.Mu.Lock()
-	storage.URLStore[shortID] = req.URL
-	storage.Mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -146,26 +150,31 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleGet(w http.ResponseWriter, r *http.Request) {
+	var err error
+	var originalURL string
+	var ok bool
 	id := chi.URLParam(r, "shortURL")
 	if id == "" {
 		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
 		return
 	}
 
-	originalURL, err := storage.Get(id)
-	if err != nil {
-		http.Error(w, "URL not found", http.StatusBadRequest)
-		return
-	}
+	if config.DatabaseDSN != "" {
+		originalURL, err = storage.Get(id)
+		if err != nil {
+			http.Error(w, "URL not found", http.StatusBadRequest)
+			return
+		}
+	} else {
+		storage.Mu.Lock()
+		originalURL, ok = storage.URLStore[id]
+		storage.Mu.Unlock()
 
-	//storage.Mu.Lock()
-	//originalURL, ok := storage.URLStore[id]
-	//storage.Mu.Unlock()
-	//
-	//if !ok {
-	//	http.Error(w, "URL not found", http.StatusBadRequest)
-	//	return
-	//}
+		if !ok {
+			http.Error(w, "URL not found", http.StatusBadRequest)
+			return
+		}
+	}
 
 	w.Header().Set("Location", originalURL)
 	w.WriteHeader(http.StatusTemporaryRedirect)
