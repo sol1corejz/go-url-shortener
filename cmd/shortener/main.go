@@ -5,7 +5,6 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
 	"github.com/sol1corejz/go-url-shortener/cmd/gzip"
-	"github.com/sol1corejz/go-url-shortener/internal/db"
 	"github.com/sol1corejz/go-url-shortener/internal/handlers"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/middlewares"
@@ -21,7 +20,7 @@ func main() {
 	var err error
 
 	if config.DatabaseDSN != "" {
-		err = db.NewPostgresStorage()
+		err = storage.NewPostgresStorage()
 		if err != nil {
 			logger.Log.Fatal("Failed to connect to DB: ", zap.String("DB", config.DatabaseDSN))
 		}

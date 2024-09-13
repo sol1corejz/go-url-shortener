@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
-	"github.com/sol1corejz/go-url-shortener/internal/db"
 	"github.com/sol1corejz/go-url-shortener/internal/file"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
@@ -51,7 +50,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 		OriginalURL: originalURL,
 	}
 
-	err = db.Save(data)
+	err = storage.Save(data)
 	if err != nil {
 		http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
 		return
@@ -109,7 +108,7 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		OriginalURL: req.URL,
 	}
 
-	err := db.Save(data)
+	err := storage.Save(data)
 	if err != nil {
 		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
 		return
@@ -153,7 +152,7 @@ func HandleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	originalURL, err := db.Get(id)
+	originalURL, err := storage.Get(id)
 	if err != nil {
 		http.Error(w, "URL not found", http.StatusBadRequest)
 		return

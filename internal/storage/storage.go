@@ -2,10 +2,16 @@ package storage
 
 import (
 	"database/sql"
-	"github.com/sol1corejz/go-url-shortener/cmd/config"
 	"github.com/sol1corejz/go-url-shortener/internal/file"
+	"github.com/sol1corejz/go-url-shortener/internal/models"
 	"sync"
 )
+
+type Storage interface {
+	Save(data models.URLData) error
+	Get(shortID string) (string, error)
+	Ping() error
+}
 
 var (
 	URLStore = make(map[string]string)
@@ -13,31 +19,3 @@ var (
 	Mu       sync.Mutex
 	DB       *sql.DB
 )
-
-func LoadURLs() error {
-	consumer, err := file.NewConsumer(config.FileStoragePath)
-	if err != nil {
-		return err
-	}
-	defer consumer.File.Close()
-
-	for {
-		event, err := consumer.ReadEvent()
-		if err != nil {
-			break
-		}
-		URLs = append(URLs, *event)
-	}
-
-	return nil
-}
-
-func SaveURL(event *file.Event) error {
-	producer, err := file.NewProducer(config.FileStoragePath)
-	if err != nil {
-		return err
-	}
-	defer producer.File.Close()
-
-	return producer.WriteEvent(event)
-}
