@@ -56,7 +56,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
 			return
 		}
-	} else {
+	} else if config.FileStoragePath != "" {
 		event := file.Event{
 			OriginalURL: originalURL,
 			ShortURL:    shortID,
@@ -73,6 +73,10 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		storage.Mu.Lock()
+		storage.URLStore[shortID] = originalURL
+		storage.Mu.Unlock()
+	} else {
 		storage.Mu.Lock()
 		storage.URLStore[shortID] = originalURL
 		storage.Mu.Unlock()
@@ -116,7 +120,7 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Failed to save URL", http.StatusInternalServerError)
 			return
 		}
-	} else {
+	} else if config.FileStoragePath != "" {
 		event := file.Event{
 			OriginalURL: req.URL,
 			ShortURL:    shortID,
@@ -136,10 +140,11 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		storage.Mu.Lock()
 		storage.URLStore[shortID] = req.URL
 		storage.Mu.Unlock()
+	} else {
+		storage.Mu.Lock()
+		storage.URLStore[shortID] = req.URL
+		storage.Mu.Unlock()
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
 
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(resp); err != nil {
@@ -147,6 +152,8 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 }
 
 func HandleGet(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +173,7 @@ func HandleGet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
+		fmt.Println(storage.URLStore)
 		storage.Mu.Lock()
 		originalURL, ok = storage.URLStore[id]
 		storage.Mu.Unlock()
