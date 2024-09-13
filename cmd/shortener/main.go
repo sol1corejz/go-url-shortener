@@ -1,11 +1,11 @@
 package main
 
 import (
-	"database/sql"
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
 	"github.com/sol1corejz/go-url-shortener/cmd/gzip"
+	"github.com/sol1corejz/go-url-shortener/internal/db"
 	"github.com/sol1corejz/go-url-shortener/internal/handlers"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/middlewares"
@@ -19,15 +19,17 @@ func main() {
 	config.ParseFlags()
 
 	var err error
-	storage.DB, err = sql.Open("pgx", config.DatabaseDSN)
-	if err != nil {
-		panic(err)
-	}
-	defer storage.DB.Close()
 
-	err = storage.LoadURLs()
-	if err != nil {
-		logger.Log.Fatal("Failed to load URLs from file: ", zap.String("file", config.DefaultFilePath))
+	if config.DatabaseDSN != "" {
+		err = db.NewPostgresStorage()
+		if err != nil {
+			logger.Log.Fatal("Failed to connect to DB: ", zap.String("DB", config.DatabaseDSN))
+		}
+	} else if config.FileStoragePath != "" {
+		err = storage.LoadURLs()
+		if err != nil {
+			logger.Log.Fatal("Failed to load URLs from file: ", zap.String("file", config.FileStoragePath))
+		}
 	}
 
 	if err := run(); err != nil {

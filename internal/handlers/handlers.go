@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
+	"github.com/sol1corejz/go-url-shortener/internal/db"
 	"github.com/sol1corejz/go-url-shortener/internal/file"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
@@ -44,9 +45,21 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 	shortID := generateShortID()
 	shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
 
+	data := models.URLData{
+		UUID:        uuid.New().String(),
+		ShortURL:    shortURL,
+		OriginalURL: originalURL,
+	}
+
+	err = db.Save(data)
+	if err != nil {
+		http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
+		return
+	}
+
 	event := file.Event{
 		OriginalURL: originalURL,
-		ShortURL:    shortURL,
+		ShortURL:    shortID,
 		UUID:        uuid.New().String(),
 	}
 
@@ -56,7 +69,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 
 	err = storage.SaveURL(&event)
 	if err != nil {
-		http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
+		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
 		return
 	}
 
@@ -90,9 +103,21 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		Result: shortURL,
 	}
 
+	data := models.URLData{
+		UUID:        uuid.New().String(),
+		ShortURL:    shortID,
+		OriginalURL: req.URL,
+	}
+
+	err := db.Save(data)
+	if err != nil {
+		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
+		return
+	}
+
 	event := file.Event{
 		OriginalURL: req.URL,
-		ShortURL:    shortURL,
+		ShortURL:    shortID,
 		UUID:        uuid.New().String(),
 	}
 
@@ -128,17 +153,24 @@ func HandleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storage.Mu.Lock()
-	originalURL, ok := storage.URLStore[id]
-	storage.Mu.Unlock()
-
-	if !ok {
+	originalURL, err := db.Get(id)
+	if err != nil {
 		http.Error(w, "URL not found", http.StatusBadRequest)
 		return
 	}
 
+	//storage.Mu.Lock()
+	//originalURL, ok := storage.URLStore[id]
+	//storage.Mu.Unlock()
+	//
+	//if !ok {
+	//	http.Error(w, "URL not found", http.StatusBadRequest)
+	//	return
+	//}
+
 	w.Header().Set("Location", originalURL)
 	w.WriteHeader(http.StatusTemporaryRedirect)
+	w.Write([]byte(originalURL))
 }
 
 func HandlePing(w http.ResponseWriter, r *http.Request) {
