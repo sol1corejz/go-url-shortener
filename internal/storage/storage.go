@@ -3,7 +3,6 @@ package storage
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
 	"github.com/sol1corejz/go-url-shortener/internal/file"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
@@ -93,8 +92,7 @@ func loadURLsFromFile() error {
 
 func SaveURL(event *models.URLData) error {
 	if DB != nil {
-		_, err := DB.Exec("INSERT INTO urls (short_url, original_url) VALUES ($1, $2) ON CONFLICT (short_url) DO NOTHING", event.ShortURL, event.OriginalURL)
-		fmt.Println("err", err)
+		_, err := DB.Exec("INSERT INTO short_urls (short_url, original_url) VALUES ($1, $2) ON CONFLICT (short_url) DO NOTHING", event.ShortURL, event.OriginalURL)
 		return err
 	} else if config.FileStoragePath != "" {
 		producer, err := file.NewProducer(config.FileStoragePath)
@@ -119,7 +117,7 @@ func SaveURL(event *models.URLData) error {
 func GetOriginalURL(shortID string) (string, bool) {
 	if DB != nil {
 		var originalURL string
-		err := DB.QueryRow("SELECT original_url FROM urls WHERE short_url = $1", shortID).Scan(&originalURL)
+		err := DB.QueryRow("SELECT original_url FROM short_urls WHERE short_url = $1", shortID).Scan(&originalURL)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return "", false
