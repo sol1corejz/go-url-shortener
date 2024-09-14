@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
-	"github.com/sol1corejz/go-url-shortener/internal/file"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
 	"github.com/sol1corejz/go-url-shortener/internal/storage"
@@ -44,25 +43,16 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 	shortID := generateShortID()
 	shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
 
-	event := file.Event{
+	event := models.URLData{
 		OriginalURL: originalURL,
-		ShortURL:    shortURL,
+		ShortURL:    shortID,
 		UUID:        uuid.New().String(),
 	}
 
-	storage.Mu.Lock()
-	storage.URLs = append(storage.URLs, event)
-	storage.Mu.Unlock()
-
-	err = storage.SaveURL(&event)
-	if err != nil {
-		http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
+	if err = storage.SaveURL(&event); err != nil {
+		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
 		return
 	}
-
-	storage.Mu.Lock()
-	storage.URLStore[shortID] = originalURL
-	storage.Mu.Unlock()
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
@@ -90,25 +80,16 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		Result: shortURL,
 	}
 
-	event := file.Event{
+	event := models.URLData{
 		OriginalURL: req.URL,
-		ShortURL:    shortURL,
+		ShortURL:    shortID,
 		UUID:        uuid.New().String(),
 	}
 
-	storage.Mu.Lock()
-	storage.URLs = append(storage.URLs, event)
-	storage.Mu.Unlock()
-
-	errSave := storage.SaveURL(&event)
-	if errSave != nil {
-		http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
+	if err := storage.SaveURL(&event); err != nil {
+		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
 		return
 	}
-
-	storage.Mu.Lock()
-	storage.URLStore[shortID] = req.URL
-	storage.Mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -118,7 +99,6 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		logger.Log.Debug("error encoding response", zap.Error(err))
 		return
 	}
-
 }
 
 func HandleGet(w http.ResponseWriter, r *http.Request) {
@@ -128,17 +108,15 @@ func HandleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storage.Mu.Lock()
-	originalURL, ok := storage.URLStore[id]
-	storage.Mu.Unlock()
-
+	originalURL, ok := storage.GetOriginalURL(id)
 	if !ok {
-		http.Error(w, "URL not found", http.StatusBadRequest)
+		http.Error(w, "URL not found", http.StatusNotFound)
 		return
 	}
 
 	w.Header().Set("Location", originalURL)
 	w.WriteHeader(http.StatusTemporaryRedirect)
+	w.Write([]byte(originalURL))
 }
 
 func HandlePing(w http.ResponseWriter, r *http.Request) {
