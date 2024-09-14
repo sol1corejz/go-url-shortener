@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 func generateShortID() string {
@@ -99,6 +100,68 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		logger.Log.Debug("error encoding response", zap.Error(err))
 		return
 	}
+}
+
+func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
+	var req []models.BatchRequest
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+		return
+	}
+	defer r.Body.Close()
+
+	if err = json.Unmarshal(body, &req); err != nil {
+		logger.Log.Info("cannot decode batch request JSON", zap.Error(err))
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if len(req) == 0 {
+		http.Error(w, "Batch cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	var res []models.BatchResponse
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	events := make([]models.URLData, len(req))
+
+	for i, item := range req {
+		wg.Add(1)
+
+		go func(i int, item models.BatchRequest) {
+			defer wg.Done()
+
+			shortID := generateShortID()
+			shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
+
+			event := models.URLData{
+				OriginalURL: item.OriginalURL,
+				ShortURL:    shortID,
+				UUID:        item.CorrelationID,
+			}
+
+			mu.Lock()
+			events[i] = event
+			res = append(res, models.BatchResponse{
+				CorrelationID: item.CorrelationID,
+				ShortURL:      shortURL,
+			})
+			mu.Unlock()
+		}(i, item)
+	}
+
+	wg.Wait()
+
+	if err := storage.SaveBatchURL(events); err != nil {
+		http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 }
 
 func HandleGet(w http.ResponseWriter, r *http.Request) {

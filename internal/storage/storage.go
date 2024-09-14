@@ -114,6 +114,19 @@ func SaveURL(event *models.URLData) error {
 	return nil
 }
 
+func SaveBatchURL(events []models.URLData) error {
+	Mu.Lock()
+	defer Mu.Unlock()
+
+	for _, event := range events {
+		if err := SaveURL(&event); err != nil {
+			return errors.New("failed to save batch URLs")
+		}
+	}
+
+	return nil
+}
+
 func GetOriginalURL(shortID string) (string, bool) {
 	if DB != nil {
 		var originalURL string
