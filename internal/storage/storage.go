@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
@@ -19,7 +20,7 @@ var (
 	DB       *sql.DB
 )
 
-func InitializeStorage() {
+func InitializeStorage(ctx context.Context) {
 	if config.DatabaseDSN != "" {
 
 		db, err := sql.Open("pgx", config.DatabaseDSN)
@@ -27,9 +28,22 @@ func InitializeStorage() {
 			logger.Log.Fatal("Error opening database connection", zap.Error(err))
 			return
 		}
+
 		DB = db
 
-		_, err = db.Exec(`
+		if err = DB.Ping(); err != nil {
+			logger.Log.Fatal("Error pinging database", zap.Error(err))
+			return
+		}
+
+		tx, err := DB.BeginTx(ctx, nil)
+		if err != nil {
+			return
+		}
+
+		defer tx.Rollback()
+
+		_, err = tx.ExecContext(ctx, `
 			CREATE TABLE IF NOT EXISTS short_urls (
 				id SERIAL PRIMARY KEY,
 				short_url TEXT NOT NULL UNIQUE,
@@ -46,6 +60,8 @@ func InitializeStorage() {
 			logger.Log.Info("Error loading URLs from DB", zap.Error(err))
 			return
 		}
+
+		tx.Commit()
 
 	} else if config.FileStoragePath != "" {
 		err := loadURLsFromFile()

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
@@ -15,7 +16,9 @@ import (
 func main() {
 	config.ParseFlags()
 
-	storage.InitializeStorage()
+	ctx := context.Background()
+
+	storage.InitializeStorage(ctx)
 
 	if err := run(); err != nil {
 		logger.Log.Fatal("Failed to run server", zap.Error(err))

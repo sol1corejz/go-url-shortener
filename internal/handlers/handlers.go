@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 func generateShortID() string {
@@ -28,6 +30,9 @@ func generateShortID() string {
 }
 
 func HandlePost(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
@@ -50,9 +55,15 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 		UUID:        uuid.New().String(),
 	}
 
-	if err = storage.SaveURL(&event); err != nil {
-		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
+	select {
+	case <-ctx.Done():
+		http.Error(w, "Request canceled or timed out", http.StatusRequestTimeout)
 		return
+	default:
+		if err = storage.SaveURL(&event); err != nil {
+			http.Error(w, "Failed to save URL", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -61,6 +72,9 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
 	var req models.Request
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&req); err != nil {
@@ -87,9 +101,15 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		UUID:        uuid.New().String(),
 	}
 
-	if err := storage.SaveURL(&event); err != nil {
-		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
+	select {
+	case <-ctx.Done():
+		http.Error(w, "Request canceled or timed out", http.StatusRequestTimeout)
 		return
+	default:
+		if err := storage.SaveURL(&event); err != nil {
+			http.Error(w, "Failed to save URL", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -103,6 +123,9 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
 	var req []models.BatchRequest
 
 	body, err := io.ReadAll(r.Body)
@@ -134,34 +157,51 @@ func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 		go func(i int, item models.BatchRequest) {
 			defer wg.Done()
 
-			shortID := generateShortID()
-			shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				shortID := generateShortID()
+				shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
 
-			event := models.URLData{
-				OriginalURL: item.OriginalURL,
-				ShortURL:    shortID,
-				UUID:        item.CorrelationID,
+				event := models.URLData{
+					OriginalURL: item.OriginalURL,
+					ShortURL:    shortID,
+					UUID:        item.CorrelationID,
+				}
+
+				mu.Lock()
+				events[i] = event
+				res = append(res, models.BatchResponse{
+					CorrelationID: item.CorrelationID,
+					ShortURL:      shortURL,
+				})
+				mu.Unlock()
 			}
-
-			mu.Lock()
-			events[i] = event
-			res = append(res, models.BatchResponse{
-				CorrelationID: item.CorrelationID,
-				ShortURL:      shortURL,
-			})
-			mu.Unlock()
 		}(i, item)
 	}
 
 	wg.Wait()
 
-	if err := storage.SaveBatchURL(events); err != nil {
-		http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
+	select {
+	case <-ctx.Done():
+		http.Error(w, "Request canceled or timed out", http.StatusRequestTimeout)
 		return
+	default:
+		if err := storage.SaveBatchURL(events); err != nil {
+			http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
+
+	if err := json.NewEncoder(w).Encode(res); err != nil {
+		logger.Log.Error("Failed to encode response", zap.Error(err))
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+
 }
 
 func HandleGet(w http.ResponseWriter, r *http.Request) {
