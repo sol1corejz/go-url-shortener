@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/jackc/pgx/v5"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
 	"github.com/sol1corejz/go-url-shortener/internal/file"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
@@ -104,11 +105,18 @@ func SaveURL(event *models.URLData) error {
 			RETURNING short_url;
 		`, event.ShortURL, event.OriginalURL).Scan(&ExistingShortURL)
 
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
+
 		if ExistingShortURL != "" {
 			return ErrAlreadyExists
 		}
 
-		return err
+		return nil
 	} else if config.FileStoragePath != "" {
 		producer, err := file.NewProducer(config.FileStoragePath)
 		if err != nil {
@@ -135,6 +143,9 @@ func SaveBatchURL(events []models.URLData) error {
 
 	for _, event := range events {
 		if err := SaveURL(&event); err != nil {
+			if errors.Is(err, ErrAlreadyExists) {
+				return nil
+			}
 			return errors.New("failed to save batch URLs")
 		}
 	}
