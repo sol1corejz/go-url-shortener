@@ -63,7 +63,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 	default:
 		if err = storage.SaveURL(&event); err != nil {
 
-			if errors.As(err, &storage.ErrAlreadyExists) {
+			if errors.Is(err, storage.ErrAlreadyExists) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusConflict)
 				resp := models.Response{
@@ -120,7 +120,7 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 	default:
 		if err := storage.SaveURL(&event); err != nil {
 
-			if errors.As(err, &storage.ErrAlreadyExists) {
+			if errors.Is(err, storage.ErrAlreadyExists) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusConflict)
 				resp := models.Response{
