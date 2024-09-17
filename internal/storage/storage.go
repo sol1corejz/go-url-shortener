@@ -113,6 +113,7 @@ func SaveURL(event *models.URLData) error {
 		}
 
 		if ExistingShortURL != "" {
+			event.ShortURL = ExistingShortURL
 			return ErrAlreadyExists
 		}
 
