@@ -136,13 +136,35 @@ func SaveURL(event *models.URLData) error {
 	Mu.Unlock()
 	return nil
 }
+func SaveSingleURL(event *models.URLData) error {
+	if DB != nil {
+		_, err := DB.Exec("INSERT INTO short_urls (short_url, original_url) VALUES ($1, $2) ON CONFLICT (short_url) DO NOTHING", event.ShortURL, event.OriginalURL)
+		return err
+	} else if config.FileStoragePath != "" {
+		producer, err := file.NewProducer(config.FileStoragePath)
+		if err != nil {
+			return err
+		}
+		defer producer.File.Close()
 
+		Mu.Lock()
+		URLStore[event.ShortURL] = event.OriginalURL
+		Mu.Unlock()
+
+		return producer.WriteEvent(event)
+	}
+
+	Mu.Lock()
+	URLStore[event.ShortURL] = event.OriginalURL
+	Mu.Unlock()
+	return nil
+}
 func SaveBatchURL(events []models.URLData) error {
 	Mu.Lock()
 	defer Mu.Unlock()
 
 	for _, event := range events {
-		if err := SaveURL(&event); err != nil {
+		if err := SaveSingleURL(&event); err != nil {
 			if errors.Is(err, ErrAlreadyExists) {
 				return nil
 			}
