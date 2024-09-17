@@ -165,9 +165,6 @@ func SaveBatchURL(events []models.URLData) error {
 
 	for _, event := range events {
 		if err := SaveSingleURL(&event); err != nil {
-			if errors.Is(err, ErrAlreadyExists) {
-				return nil
-			}
 			return errors.New("failed to save batch URLs")
 		}
 	}
