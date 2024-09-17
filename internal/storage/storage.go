@@ -101,7 +101,7 @@ func SaveURL(event *models.URLData) error {
 			INSERT INTO short_urls (short_url, original_url) 
 			VALUES ($1, $2) 
 			ON CONFLICT (original_url)
-			DO UPDATE SET short_url = short_urls.short_url
+			DO UPDATE SET short_url = EXCLUDED.short_url
 			RETURNING short_url;
 		`, event.ShortURL, event.OriginalURL).Scan(&ExistingShortURL)
 
@@ -136,6 +136,7 @@ func SaveURL(event *models.URLData) error {
 	Mu.Unlock()
 	return nil
 }
+
 func SaveSingleURL(event *models.URLData) error {
 	if DB != nil {
 		_, err := DB.Exec("INSERT INTO short_urls (short_url, original_url) VALUES ($1, $2) ON CONFLICT (short_url) DO NOTHING", event.ShortURL, event.OriginalURL)
@@ -159,6 +160,7 @@ func SaveSingleURL(event *models.URLData) error {
 	Mu.Unlock()
 	return nil
 }
+
 func SaveBatchURL(events []models.URLData) error {
 	Mu.Lock()
 	defer Mu.Unlock()
