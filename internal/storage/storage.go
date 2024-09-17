@@ -19,7 +19,7 @@ var (
 	Mu               sync.Mutex
 	DB               *sql.DB
 	ExistingShortURL string
-	ErrAlreadyExists = errors.New("Ссылка уже сокращена")
+	ErrAlreadyExists = errors.New("ссылка уже сокращена")
 )
 
 func InitializeStorage(ctx context.Context) {
