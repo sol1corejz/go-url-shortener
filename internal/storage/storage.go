@@ -15,9 +15,11 @@ import (
 )
 
 var (
-	URLStore = make(map[string]string)
-	Mu       sync.Mutex
-	DB       *sql.DB
+	URLStore         = make(map[string]string)
+	Mu               sync.Mutex
+	DB               *sql.DB
+	ExistingShortURL string
+	ErrAlreadyExists = errors.New("Ссылка уже сокращена")
 )
 
 func InitializeStorage(ctx context.Context) {
@@ -35,7 +37,7 @@ func InitializeStorage(ctx context.Context) {
 			CREATE TABLE IF NOT EXISTS short_urls (
 				id SERIAL PRIMARY KEY,
 				short_url TEXT NOT NULL UNIQUE,
-				original_url TEXT NOT NULL
+				original_url TEXT NOT NULL UNIQUE
 			)
 		`)
 		if err != nil {
@@ -94,7 +96,18 @@ func loadURLsFromFile() error {
 
 func SaveURL(event *models.URLData) error {
 	if DB != nil {
-		_, err := DB.Exec("INSERT INTO short_urls (short_url, original_url) VALUES ($1, $2) ON CONFLICT (short_url) DO NOTHING", event.ShortURL, event.OriginalURL)
+		err := DB.QueryRow(`
+			INSERT INTO short_urls (short_url, original_url) 
+			VALUES ($1, $2) 
+			ON CONFLICT (original_url)
+			DO UPDATE SET short_url = short_urls.short_url
+			RETURNING short_url;
+		`, event.ShortURL, event.OriginalURL).Scan(&ExistingShortURL)
+
+		if ExistingShortURL != "" {
+			return ErrAlreadyExists
+		}
+
 		return err
 	} else if config.FileStoragePath != "" {
 		producer, err := file.NewProducer(config.FileStoragePath)

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -61,6 +62,17 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 		if err = storage.SaveURL(&event); err != nil {
+
+			if errors.As(err, &storage.ErrAlreadyExists) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				resp := models.Response{
+					Result: fmt.Sprintf("%s/%s", config.FlagBaseURL, storage.ExistingShortURL),
+				}
+				json.NewEncoder(w).Encode(resp)
+				return
+			}
+
 			http.Error(w, "Failed to save URL", http.StatusInternalServerError)
 			return
 		}
@@ -107,6 +119,17 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 		if err := storage.SaveURL(&event); err != nil {
+
+			if errors.As(err, &storage.ErrAlreadyExists) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				resp := models.Response{
+					Result: fmt.Sprintf("%s/%s", config.FlagBaseURL, storage.ExistingShortURL),
+				}
+				json.NewEncoder(w).Encode(resp)
+				return
+			}
+
 			http.Error(w, "Failed to save URL", http.StatusInternalServerError)
 			return
 		}
