@@ -120,8 +120,6 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 	default:
 		if err := storage.SaveURL(&event); err != nil {
 
-			fmt.Println(1111111111111111, err)
-
 			if errors.Is(err, storage.ErrAlreadyExists) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusConflict)
