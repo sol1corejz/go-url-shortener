@@ -12,6 +12,8 @@ type Claims struct {
 	UserID string
 }
 
+var UserUUID string
+
 const TokenExp = time.Hour * 3
 const SecretKey = "supersecretkey"
 
@@ -25,12 +27,15 @@ func GenerateToken() (string, error) {
 }
 
 func BuildJWTString() (string, error) {
+
+	UserUUID = uuid.New().String()
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(TokenExp)),
 		},
 
-		UserID: uuid.New().String(),
+		UserID: UserUUID,
 	})
 
 	tokenString, err := token.SignedString([]byte(SecretKey))

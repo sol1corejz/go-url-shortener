@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
+	"github.com/sol1corejz/go-url-shortener/internal/auth"
 	"github.com/sol1corejz/go-url-shortener/internal/file"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
@@ -38,7 +39,8 @@ func InitializeStorage(ctx context.Context) {
 			CREATE TABLE IF NOT EXISTS short_urls (
 				id SERIAL PRIMARY KEY,
 				short_url TEXT NOT NULL UNIQUE,
-				original_url TEXT NOT NULL UNIQUE
+				original_url TEXT NOT NULL UNIQUE,
+			    user_id TEXT NOT NULL UNIQUE
 			)
 		`)
 		if err != nil {
@@ -98,12 +100,12 @@ func loadURLsFromFile() error {
 func SaveURL(event *models.URLData) error {
 	if DB != nil {
 		err := DB.QueryRow(`
-			INSERT INTO short_urls (short_url, original_url) 
-			VALUES ($1, $2) 
+			INSERT INTO short_urls (short_url, original_url, user_id) 
+			VALUES ($1, $2, $3) 
 			ON CONFLICT (original_url)
 			DO UPDATE SET short_url = short_urls.short_url
 			RETURNING short_url;
-		`, event.ShortURL, event.OriginalURL).Scan(&ExistingShortURL)
+		`, event.ShortURL, event.OriginalURL, auth.UserUUID).Scan(&ExistingShortURL)
 
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -140,7 +142,7 @@ func SaveURL(event *models.URLData) error {
 
 func SaveSingleURL(event *models.URLData) error {
 	if DB != nil {
-		_, err := DB.Exec("INSERT INTO short_urls (short_url, original_url) VALUES ($1, $2) ON CONFLICT (short_url) DO NOTHING", event.ShortURL, event.OriginalURL)
+		_, err := DB.Exec("INSERT INTO short_urls (short_url, original_url) VALUES ($1, $2, $3) ON CONFLICT (short_url) DO NOTHING", event.ShortURL, event.OriginalURL, auth.UserUUID)
 		return err
 	} else if config.FileStoragePath != "" {
 		producer, err := file.NewProducer(config.FileStoragePath)
