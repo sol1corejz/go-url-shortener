@@ -1,9 +1,9 @@
 package auth
 
 import (
-	"fmt"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
+	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"time"
 )
 
@@ -57,10 +57,10 @@ func GetUserID(tokenString string) string {
 	}
 
 	if !token.Valid {
-		fmt.Println("Token is not valid")
+		logger.Log.Info("Token is not valid")
 		return ""
 	}
 
-	fmt.Println("Token is valid")
+	logger.Log.Info("Token is valid")
 	return claims.UserID
 }

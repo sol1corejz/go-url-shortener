@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
 	"github.com/sol1corejz/go-url-shortener/internal/auth"
@@ -142,7 +143,8 @@ func SaveURL(event *models.URLData) error {
 
 func SaveSingleURL(event *models.URLData) error {
 	if DB != nil {
-		_, err := DB.Exec("INSERT INTO short_urls (short_url, original_url) VALUES ($1, $2, $3) ON CONFLICT (short_url) DO NOTHING", event.ShortURL, event.OriginalURL, auth.UserUUID)
+		_, err := DB.Exec("INSERT INTO short_urls (short_url, original_url, user_id) VALUES ($1, $2, $3) ON CONFLICT (original_url) DO NOTHING;", event.ShortURL, event.OriginalURL, auth.UserUUID)
+		fmt.Println(err)
 		return err
 	} else if config.FileStoragePath != "" {
 		producer, err := file.NewProducer(config.FileStoragePath)
