@@ -92,7 +92,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 
 			if errors.Is(err, storage.ErrAlreadyExists) {
 				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusConflict)
+				w.WriteHeader(http.StatusCreated)
 				resp := models.Response{
 					Result: fmt.Sprintf("%s/%s", config.FlagBaseURL, storage.ExistingShortURL),
 				}
