@@ -364,15 +364,9 @@ func HandleGetUserURLs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	formattedUrls := make([]string, len(urls))
-
-	for _, url := range urls {
-		formattedUrls = append(formattedUrls, fmt.Sprintf("%s/%s", config.FlagBaseURL, url))
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(formattedUrls); err != nil {
+	if err := json.NewEncoder(w).Encode(urls); err != nil {
 		logger.Log.Error("Failed to encode response", zap.Error(err))
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}

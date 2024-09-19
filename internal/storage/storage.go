@@ -220,7 +220,7 @@ func GetURLsByUser(userID string) ([]models.URLData, error) {
 			if err := rows.Scan(&shortURL, &originalURL); err != nil {
 				return nil, err
 			}
-			urls = append(urls, models.URLData{ShortURL: shortURL, OriginalURL: originalURL})
+			urls = append(urls, models.URLData{ShortURL: config.FlagRunAddr + shortURL, OriginalURL: originalURL})
 		}
 		return urls, rows.Err()
 	}
