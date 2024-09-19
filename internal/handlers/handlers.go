@@ -179,7 +179,7 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 				resp := models.Response{
 					Result: fmt.Sprintf("%s/%s", config.FlagBaseURL, storage.ExistingShortURL),
 				}
-				json.NewEncoder(w).Encode(resp.Result)
+				json.NewEncoder(w).Encode(resp)
 				return
 			}
 
