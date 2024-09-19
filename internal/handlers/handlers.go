@@ -51,9 +51,9 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 			HttpOnly: true,
 		})
 
-		userID = auth.GetUserId(token)
+		userID = auth.GetUserID(token)
 	} else {
-		userID = auth.GetUserId(cookie.Value)
+		userID = auth.GetUserID(cookie.Value)
 		if userID == "" {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
@@ -130,9 +130,9 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 			HttpOnly: true,
 		})
 
-		userID = auth.GetUserId(token)
+		userID = auth.GetUserID(token)
 	} else {
-		userID = auth.GetUserId(cookie.Value)
+		userID = auth.GetUserID(cookie.Value)
 		if userID == "" {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
@@ -218,9 +218,9 @@ func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 			HttpOnly: true,
 		})
 
-		userID = auth.GetUserId(token)
+		userID = auth.GetUserID(token)
 	} else {
-		userID = auth.GetUserId(cookie.Value)
+		userID = auth.GetUserID(cookie.Value)
 		if userID == "" {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
@@ -314,7 +314,7 @@ func HandleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := auth.GetUserId(cookie.Value)
+	userID := auth.GetUserID(cookie.Value)
 	if userID == "" {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -355,7 +355,7 @@ func HandleGetUserURLs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := auth.GetUserId(cookie.Value)
+	userID := auth.GetUserID(cookie.Value)
 	if userID == "" {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
