@@ -93,7 +93,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 			if errors.Is(err, storage.ErrAlreadyExists) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusConflict)
-				w.Write([]byte(shortURL))
+				w.Write([]byte(fmt.Sprintf("%s/%s", config.FlagBaseURL, storage.ExistingShortURL)))
 
 				storage.ExistingShortURL = ""
 
@@ -191,8 +191,6 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
-	fmt.Println("WHY AM I HERE")
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
