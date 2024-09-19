@@ -100,24 +100,32 @@ func loadURLsFromFile() error {
 
 func SaveURL(event *models.URLData) error {
 	if DB != nil {
+
 		err := DB.QueryRow(`
-			INSERT INTO short_urls (short_url, original_url, user_id) 
-			VALUES ($1, $2, $3) 
-			ON CONFLICT (original_url)
-			DO UPDATE SET short_url = short_urls.short_url
-			RETURNING short_url;
-		`, event.ShortURL, event.OriginalURL, auth.UserUUID).Scan(&ExistingShortURL)
+			SELECT short_url FROM short_urls WHERE original_url=$1
+		`, event.OriginalURL).Scan(&ExistingShortURL)
 
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil
+			if !errors.Is(err, pgx.ErrNoRows) {
+			} else {
+				return err
 			}
-			return err
 		}
 
 		if ExistingShortURL != "" {
 			event.ShortURL = ExistingShortURL
 			return ErrAlreadyExists
+		}
+
+		_, err = DB.Exec(`
+			INSERT INTO short_urls (short_url, original_url, user_id) 
+			VALUES ($1, $2, $3) 
+			ON CONFLICT (original_url)
+			DO UPDATE SET short_url = short_urls.short_url
+		`, event.ShortURL, event.OriginalURL, auth.UserUUID)
+
+		if err != nil {
+			return err
 		}
 
 		return nil
