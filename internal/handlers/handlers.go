@@ -47,7 +47,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "token",
 			Value:    token,
-			Expires:  time.Now().Add(auth.TOKEN_EXP),
+			Expires:  time.Now().Add(auth.TokenExp),
 			HttpOnly: true,
 		})
 
@@ -126,7 +126,7 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "token",
 			Value:    token,
-			Expires:  time.Now().Add(auth.TOKEN_EXP),
+			Expires:  time.Now().Add(auth.TokenExp),
 			HttpOnly: true,
 		})
 
@@ -214,7 +214,7 @@ func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "token",
 			Value:    token,
-			Expires:  time.Now().Add(auth.TOKEN_EXP),
+			Expires:  time.Now().Add(auth.TokenExp),
 			HttpOnly: true,
 		})
 
