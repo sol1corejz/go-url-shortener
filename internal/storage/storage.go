@@ -41,7 +41,7 @@ func InitializeStorage(ctx context.Context) {
 				id SERIAL PRIMARY KEY,
 				short_url TEXT NOT NULL UNIQUE,
 				original_url TEXT NOT NULL UNIQUE,
-			    user_id TEXT NOT NULL UNIQUE
+			    user_id TEXT NOT NULL
 			)
 		`)
 		if err != nil {
