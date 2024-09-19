@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
+	"github.com/sol1corejz/go-url-shortener/internal/auth"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
 	"github.com/sol1corejz/go-url-shortener/internal/storage"
@@ -34,6 +35,31 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
+	cookie, err := r.Cookie("Authorization")
+	var userID string
+	if err != nil {
+		token, err := auth.GenerateToken()
+		if err != nil {
+			http.Error(w, "Unable to generate token", http.StatusInternalServerError)
+			return
+		}
+
+		http.SetCookie(w, &http.Cookie{
+			Name:     "token",
+			Value:    token,
+			Expires:  time.Now().Add(auth.TOKEN_EXP),
+			HttpOnly: true,
+		})
+
+		userID = auth.GetUserId(token)
+	} else {
+		userID = auth.GetUserId(cookie.Value)
+		if userID == "" {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+	}
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
@@ -54,6 +80,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 		OriginalURL: originalURL,
 		ShortURL:    shortID,
 		UUID:        uuid.New().String(),
+		UserUUID:    userID,
 	}
 
 	select {
@@ -87,6 +114,31 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
+	cookie, err := r.Cookie("Authorization")
+	var userID string
+	if err != nil {
+		token, err := auth.GenerateToken()
+		if err != nil {
+			http.Error(w, "Unable to generate token", http.StatusInternalServerError)
+			return
+		}
+
+		http.SetCookie(w, &http.Cookie{
+			Name:     "token",
+			Value:    token,
+			Expires:  time.Now().Add(auth.TOKEN_EXP),
+			HttpOnly: true,
+		})
+
+		userID = auth.GetUserId(token)
+	} else {
+		userID = auth.GetUserId(cookie.Value)
+		if userID == "" {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+	}
+
 	var req models.Request
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&req); err != nil {
@@ -111,6 +163,7 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		OriginalURL: req.URL,
 		ShortURL:    shortID,
 		UUID:        uuid.New().String(),
+		UserUUID:    userID,
 	}
 
 	select {
@@ -148,6 +201,31 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
+
+	cookie, err := r.Cookie("Authorization")
+	var userID string
+	if err != nil {
+		token, err := auth.GenerateToken()
+		if err != nil {
+			http.Error(w, "Unable to generate token", http.StatusInternalServerError)
+			return
+		}
+
+		http.SetCookie(w, &http.Cookie{
+			Name:     "token",
+			Value:    token,
+			Expires:  time.Now().Add(auth.TOKEN_EXP),
+			HttpOnly: true,
+		})
+
+		userID = auth.GetUserId(token)
+	} else {
+		userID = auth.GetUserId(cookie.Value)
+		if userID == "" {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+	}
 
 	var req []models.BatchRequest
 
@@ -191,6 +269,7 @@ func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 					OriginalURL: item.OriginalURL,
 					ShortURL:    shortID,
 					UUID:        item.CorrelationID,
+					UserUUID:    userID,
 				}
 
 				mu.Lock()
@@ -228,6 +307,19 @@ func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleGet(w http.ResponseWriter, r *http.Request) {
+
+	cookie, err := r.Cookie("token")
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	userID := auth.GetUserId(cookie.Value)
+	if userID == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	id := chi.URLParam(r, "shortURL")
 	if id == "" {
 		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
@@ -253,4 +345,37 @@ func HandlePing(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("pong"))
+}
+
+func HandleGetUserURLs(w http.ResponseWriter, r *http.Request) {
+
+	cookie, err := r.Cookie("token")
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	userID := auth.GetUserId(cookie.Value)
+	if userID == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	urls, err := storage.GetURLsByUser(userID)
+	if err != nil {
+		http.Error(w, "Failed to retrieve URLs", http.StatusInternalServerError)
+		return
+	}
+
+	if len(urls) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(urls); err != nil {
+		logger.Log.Error("Failed to encode response", zap.Error(err))
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }

@@ -193,3 +193,24 @@ func GetOriginalURL(shortID string) (string, bool) {
 	originalURL, ok := URLStore[shortID]
 	return originalURL, ok
 }
+
+func GetURLsByUser(userID string) ([]models.URLData, error) {
+	if DB != nil {
+		rows, err := DB.Query("SELECT short_url, original_url FROM short_urls WHERE user_id = $1", userID)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		var urls []models.URLData
+		for rows.Next() {
+			var shortURL, originalURL string
+			if err := rows.Scan(&shortURL, &originalURL); err != nil {
+				return nil, err
+			}
+			urls = append(urls, models.URLData{ShortURL: shortURL, OriginalURL: originalURL})
+		}
+		return urls, rows.Err()
+	}
+	return nil, nil
+}
