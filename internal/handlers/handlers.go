@@ -308,18 +308,6 @@ func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 
 func HandleGet(w http.ResponseWriter, r *http.Request) {
 
-	cookie, err := r.Cookie("token")
-	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	userID := auth.GetUserID(cookie.Value)
-	if userID == "" {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
 	id := chi.URLParam(r, "shortURL")
 	if id == "" {
 		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
