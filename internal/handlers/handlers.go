@@ -176,10 +176,7 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 			if errors.Is(err, storage.ErrAlreadyExists) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusConflict)
-				resp := models.Response{
-					Result: fmt.Sprintf("%s/%s", config.FlagBaseURL, storage.ExistingShortURL),
-				}
-				json.NewEncoder(w).Encode(resp)
+				w.Write([]byte(config.FlagBaseURL + storage.ExistingShortURL))
 				return
 			}
 
