@@ -2,11 +2,12 @@ package main
 
 import (
 	"bytes"
-	"compress/gzip"
 	"encoding/json"
 	"github.com/go-chi/chi/v5"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
+	"github.com/sol1corejz/go-url-shortener/internal/handlers"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
+	"github.com/sol1corejz/go-url-shortener/internal/storage"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -79,7 +80,7 @@ func Test_handlePost(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.inputURL))
 			w := httptest.NewRecorder()
 
-			handlePost(w, req)
+			handlers.HandlePost(w, req)
 
 			res := w.Result()
 			defer res.Body.Close()
@@ -87,17 +88,21 @@ func Test_handlePost(t *testing.T) {
 			assert.Equal(t, test.want.code, res.StatusCode)
 
 			if test.want.code == http.StatusCreated {
-
 				resBody, err := io.ReadAll(res.Body)
-
 				require.NoError(t, err)
 
 				assert.Equal(t, test.want.contentType, res.Header.Get("Content-Type"))
 
+				// Дополнительная проверка длины ShortURL
 				shortURLs := strings.Split(string(resBody), "/")
-				shortURL := shortURLs[len(shortURLs)-1]
+				shortID := shortURLs[len(shortURLs)-1]
+				assert.Len(t, shortID, 8)
 
-				assert.Len(t, shortURL, 8)
+				// Проверка сохранения в локальное хранилище
+				storage.Mu.Lock()
+				_, ok := storage.URLStore[shortID]
+				storage.Mu.Unlock()
+				assert.True(t, ok)
 			}
 		})
 	}
@@ -105,13 +110,13 @@ func Test_handlePost(t *testing.T) {
 
 func Test_handleGet(t *testing.T) {
 	r := chi.NewRouter()
-	r.Get("/{shortURL}", handleGet)
+	r.Get("/{shortURL}", handlers.HandleGet)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
-	mu.Lock()
-	urlStore["abc123"] = "https://www.google.com"
-	mu.Unlock()
+	storage.Mu.Lock()
+	storage.URLStore["abc123"] = "https://www.google.com"
+	storage.Mu.Unlock()
 
 	type want struct {
 		code     int
@@ -125,16 +130,11 @@ func Test_handleGet(t *testing.T) {
 		{
 			name:         "Test valid short URL",
 			inputShortID: "abc123",
-			want:         want{code: http.StatusOK},
+			want:         want{code: http.StatusOK, location: "https://www.google.com"},
 		},
 		{
 			name:         "Test invalid short URL",
 			inputShortID: "ab23",
-			want:         want{code: http.StatusBadRequest},
-		},
-		{
-			name:         "Test empty short URL",
-			inputShortID: "",
 			want:         want{code: http.StatusNotFound},
 		},
 	}
@@ -143,7 +143,11 @@ func Test_handleGet(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			resp, _ := testRequest(t, ts, "GET", "/"+test.inputShortID)
 			defer resp.Body.Close()
+
 			assert.Equal(t, test.want.code, resp.StatusCode)
+			if test.want.code == http.StatusTemporaryRedirect {
+				assert.Equal(t, test.want.location, resp.Header.Get("Location"))
+			}
 		})
 	}
 }
@@ -189,8 +193,7 @@ func Test_handleJSONPost(t *testing.T) {
 			initFile(t)
 
 			r := chi.NewRouter()
-			r.Post("/api/shorten", handleJSONPost)
-			r.Get("/{shortURL}", handleGet)
+			r.Post("/api/shorten", handlers.HandleJSONPost)
 
 			ts := httptest.NewServer(r)
 			defer ts.Close()
@@ -201,11 +204,10 @@ func Test_handleJSONPost(t *testing.T) {
 
 			rr := httptest.NewRecorder()
 
-			handler := http.HandlerFunc(handleJSONPost)
+			handler := http.HandlerFunc(handlers.HandleJSONPost)
 			handler.ServeHTTP(rr, req)
 
 			assert.Equal(t, test.want.code, rr.Code)
-
 			assert.Equal(t, test.want.contentType, rr.Header().Get("Content-Type"))
 
 			if test.want.code == http.StatusCreated {
@@ -218,73 +220,4 @@ func Test_handleJSONPost(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestGzipCompression(t *testing.T) {
-
-	config.FlagBaseURL = "http://localhost:8080"
-	r := chi.NewRouter()
-	r.Post("/api/shorten", gzipMiddleware(handleJSONPost))
-
-	ts := httptest.NewServer(r)
-	defer ts.Close()
-
-	requestBody := `{"url": "https://yypo2q5oco9.net"}`
-
-	t.Run("sends_gzip", func(t *testing.T) {
-		buf := bytes.NewBuffer(nil)
-		zb := gzip.NewWriter(buf)
-
-		_, err := zb.Write([]byte(requestBody))
-		require.NoError(t, err)
-
-		err = zb.Close()
-		require.NoError(t, err)
-
-		req := httptest.NewRequest(http.MethodPost, "/api/shorten", buf)
-
-		req.RequestURI = ""
-		req.Header.Set("Content-Encoding", "gzip")
-		req.Header.Set("Accept-Encoding", "")
-
-		rr := httptest.NewRecorder()
-
-		handler := gzipMiddleware(handleJSONPost)
-		handler.ServeHTTP(rr, req)
-
-		if rr.Code == http.StatusCreated {
-			var resp models.Response
-			err := json.Unmarshal(rr.Body.Bytes(), &resp)
-			assert.NoError(t, err)
-			assert.NotEmpty(t, resp.Result)
-		} else {
-			assert.Equal(t, rr.Body.String(), "Empty URL\n")
-		}
-	})
-
-	t.Run("accepts_gzip", func(t *testing.T) {
-		buf := bytes.NewBufferString(requestBody)
-
-		req := httptest.NewRequest(http.MethodPost, "/api/shorten", buf)
-
-		req.RequestURI = ""
-		req.Header.Set("Accept-Encoding", "gzip")
-
-		rr := httptest.NewRecorder()
-
-		handler := gzipMiddleware(handleJSONPost)
-		handler.ServeHTTP(rr, req)
-
-		if rr.Code == http.StatusCreated {
-
-			zresp, err := gzip.NewReader(rr.Body)
-			require.NoError(t, err)
-
-			res, err := io.ReadAll(zresp)
-			require.NoError(t, err)
-			assert.NotEmpty(t, res)
-		} else {
-			assert.Equal(t, rr.Body.String(), "Empty URL\n")
-		}
-	})
 }

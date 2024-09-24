@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var Log *zap.Logger = zap.NewNop()
+var Log = zap.NewNop()
 
 func Initialize(level string) error {
 
@@ -42,7 +42,6 @@ func RequestLogger(h http.HandlerFunc) http.HandlerFunc {
 
 		duration := time.Since(start)
 
-		// отправляем сведения о запросе в zap
 		Log.Info("got incoming HTTP request",
 			zap.String("path", uri),
 			zap.String("method", method),

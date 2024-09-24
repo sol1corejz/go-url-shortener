@@ -2,14 +2,9 @@ package file
 
 import (
 	"encoding/json"
+	"github.com/sol1corejz/go-url-shortener/internal/models"
 	"os"
 )
-
-type Event struct {
-	UUID        string `json:"uuid"`
-	ShortURL    string `json:"short_url"`
-	OriginalURL string `json:"original_url"`
-}
 
 type Producer struct {
 	File    *os.File
@@ -33,7 +28,7 @@ func NewProducer(fileName string) (*Producer, error) {
 	}, nil
 }
 
-func (p *Producer) WriteEvent(event *Event) error {
+func (p *Producer) WriteEvent(event *models.URLData) error {
 	return p.encoder.Encode(&event)
 }
 
@@ -49,8 +44,8 @@ func NewConsumer(fileName string) (*Consumer, error) {
 	}, nil
 }
 
-func (c *Consumer) ReadEvent() (*Event, error) {
-	event := &Event{}
+func (c *Consumer) ReadEvent() (*models.URLData, error) {
+	event := &models.URLData{}
 	if err := c.decoder.Decode(&event); err != nil {
 		return nil, err
 	}

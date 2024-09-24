@@ -10,7 +10,7 @@ var (
 	FlagBaseURL     string
 	FlagLogLevel    string
 	FileStoragePath string
-	DefaultFilePath = "urls.json"
+	DatabaseDSN     string
 )
 
 func ParseFlags() {
@@ -19,6 +19,7 @@ func ParseFlags() {
 	flag.StringVar(&FlagBaseURL, "b", "http://localhost:8080", "base URL for shortened links")
 	flag.StringVar(&FlagLogLevel, "l", "info", "log level")
 	flag.StringVar(&FileStoragePath, "f", "", "file storage path")
+	flag.StringVar(&DatabaseDSN, "d", "", "databse dsn")
 	flag.Parse()
 
 	if envRunAddr := os.Getenv("SERVER_ADDRESS"); envRunAddr != "" {
@@ -33,7 +34,7 @@ func ParseFlags() {
 		FileStoragePath = envStoragePath
 	}
 
-	if FileStoragePath == "" {
-		FileStoragePath = DefaultFilePath
+	if databaseDsn := os.Getenv("DATABASE_DSN"); databaseDsn != "" {
+		DatabaseDSN = databaseDsn
 	}
 }
