@@ -105,11 +105,11 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Request canceled or timed out", http.StatusRequestTimeout)
 		return
 	default:
-		if err = storage.SaveURL(&event); err != nil {
+		if existURL, err := storage.SaveURL(&event); err != nil {
 			if errors.Is(err, storage.ErrAlreadyExists) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusConflict)
-				w.Write([]byte(fmt.Sprintf("%s/%s", config.FlagBaseURL, storage.ExistingShortURL)))
+				w.Write([]byte(fmt.Sprintf("%s/%s", config.FlagBaseURL, existURL)))
 
 				storage.ExistingShortURL = ""
 				return
@@ -192,14 +192,14 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Request canceled or timed out", http.StatusRequestTimeout)
 		return
 	default:
-		if err := storage.SaveURL(&event); err != nil {
+		if existURL, err := storage.SaveURL(&event); err != nil {
 
 			if errors.Is(err, storage.ErrAlreadyExists) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusConflict)
 
 				resp := models.Response{
-					Result: fmt.Sprintf("%s/%s", config.FlagBaseURL, storage.ExistingShortURL),
+					Result: fmt.Sprintf("%s/%s", config.FlagBaseURL, existURL),
 				}
 				json.NewEncoder(w).Encode(resp)
 
@@ -222,9 +222,6 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-	defer cancel()
-
 	cookie, err := r.Cookie("token")
 	var userID string
 	if errors.Is(err, http.ErrNoCookie) {
@@ -274,54 +271,8 @@ func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var res []models.BatchResponse
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	events := make([]models.URLData, len(req))
 
-	for i, item := range req {
-		wg.Add(1)
-
-		go func(i int, item models.BatchRequest) {
-			defer wg.Done()
-
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				shortID := generateShortID()
-				shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
-
-				event := models.URLData{
-					OriginalURL: item.OriginalURL,
-					ShortURL:    shortID,
-					UUID:        item.CorrelationID,
-					UserUUID:    userID,
-					DeletedFlag: false,
-				}
-
-				mu.Lock()
-				events[i] = event
-				res = append(res, models.BatchResponse{
-					CorrelationID: item.CorrelationID,
-					ShortURL:      shortURL,
-				})
-				mu.Unlock()
-			}
-		}(i, item)
-	}
-
-	wg.Wait()
-
-	select {
-	case <-ctx.Done():
-		http.Error(w, "Request canceled or timed out", http.StatusRequestTimeout)
-		return
-	default:
-		if err := storage.SaveBatchURL(events); err != nil {
-			http.Error(w, "Failed to save URLs", http.StatusInternalServerError)
-			return
-		}
-	}
+	processBatchPost(req, userID, &res)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -330,6 +281,108 @@ func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 		logger.Log.Error("Failed to encode response", zap.Error(err))
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
+}
+
+func processBatchPost(req []models.BatchRequest, userId string, res *[]models.BatchResponse) {
+	doneCh := make(chan struct{})
+	defer close(doneCh)
+
+	inputCh := generatorBatchPost(doneCh, req, userId)
+	channels := fanOutBatchPost(doneCh, inputCh)
+	resultCh := fanInBatchPost(doneCh, channels...)
+
+	for result := range resultCh {
+		*res = append(*res, result)
+	}
+}
+
+func postUrl(doneCh chan struct{}, inputCh chan models.URLData) chan models.BatchResponse {
+	resultCh := make(chan models.BatchResponse)
+	go func() {
+		defer close(resultCh)
+		for event := range inputCh {
+			batchResponse := models.BatchResponse{
+				CorrelationID: event.CorrelationID,
+				ShortURL:      "",
+			}
+			shortURL, err := storage.SaveURL(&event)
+			if err != nil {
+				if errors.Is(err, storage.ErrAlreadyExists) {
+					batchResponse.ShortURL = fmt.Sprintf("%s/%s", config.FlagBaseURL, shortURL)
+				}
+			} else {
+				batchResponse.ShortURL = fmt.Sprintf("%s/%s", config.FlagBaseURL, event.ShortURL)
+			}
+			select {
+			case <-doneCh:
+				return
+			case resultCh <- batchResponse:
+			}
+		}
+	}()
+	return resultCh
+}
+
+func generatorBatchPost(doneCh chan struct{}, data []models.BatchRequest, userId string) chan models.URLData {
+	inputCh := make(chan models.URLData)
+	go func() {
+		defer close(inputCh)
+		for _, event := range data {
+			ev := models.URLData{
+				UUID:          uuid.New().String(),
+				ShortURL:      generateShortID(),
+				OriginalURL:   event.OriginalURL,
+				DeletedFlag:   false,
+				UserUUID:      userId,
+				CorrelationID: event.CorrelationID,
+			}
+			select {
+			case <-doneCh:
+				return
+			case inputCh <- ev:
+			}
+		}
+	}()
+	return inputCh
+}
+
+func fanOutBatchPost(doneCh chan struct{}, inputCh chan models.URLData) []chan models.BatchResponse {
+	numWorkers := 5
+	channels := make([]chan models.BatchResponse, numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		channels[i] = postUrl(doneCh, inputCh)
+	}
+	return channels
+}
+
+func fanInBatchPost(doneCh chan struct{}, resultChs ...chan models.BatchResponse) chan models.BatchResponse {
+	finalCh := make(chan models.BatchResponse)
+	var wg sync.WaitGroup
+
+	for _, ch := range resultChs {
+		wg.Add(1)
+
+		chClosure := ch
+
+		go func() {
+			defer wg.Done()
+
+			for res := range chClosure {
+				select {
+				case <-doneCh:
+					return
+				case finalCh <- res:
+				}
+			}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(finalCh)
+	}()
+
+	return finalCh
 }
 
 func HandleGet(w http.ResponseWriter, r *http.Request) {
@@ -429,30 +482,15 @@ func processDeleteBatch(ids []string, userID string) {
 	doneCh := make(chan struct{})
 	defer close(doneCh)
 
-	inputCh := generator(doneCh, ids)
-	channels := fanOut(doneCh, inputCh, userID)
-	errorCh := fanIn(doneCh, channels...)
+	inputCh := generatorDeleteBatch(doneCh, ids)
+	channels := fanOutDeleteBatch(doneCh, inputCh, userID)
+	errorCh := fanInDeleteBatch(doneCh, channels...)
 
 	for err := range errorCh {
 		if err != nil {
 			logger.Log.Error("Failed to delete URL", zap.Error(err))
 		}
 	}
-}
-
-func generator(doneCh chan struct{}, ids []string) chan string {
-	inputCh := make(chan string)
-	go func() {
-		defer close(inputCh)
-		for _, id := range ids {
-			select {
-			case <-doneCh:
-				return
-			case inputCh <- id:
-			}
-		}
-	}()
-	return inputCh
 }
 
 func deleteUrl(doneCh chan struct{}, inputCh chan string, userID string) chan error {
@@ -471,7 +509,22 @@ func deleteUrl(doneCh chan struct{}, inputCh chan string, userID string) chan er
 	return resultCh
 }
 
-func fanOut(doneCh chan struct{}, inputCh chan string, userID string) []chan error {
+func generatorDeleteBatch(doneCh chan struct{}, ids []string) chan string {
+	inputCh := make(chan string)
+	go func() {
+		defer close(inputCh)
+		for _, id := range ids {
+			select {
+			case <-doneCh:
+				return
+			case inputCh <- id:
+			}
+		}
+	}()
+	return inputCh
+}
+
+func fanOutDeleteBatch(doneCh chan struct{}, inputCh chan string, userID string) []chan error {
 	numWorkers := 5
 	channels := make([]chan error, numWorkers)
 	for i := 0; i < numWorkers; i++ {
@@ -480,7 +533,7 @@ func fanOut(doneCh chan struct{}, inputCh chan string, userID string) []chan err
 	return channels
 }
 
-func fanIn(doneCh chan struct{}, resultChs ...chan error) chan error {
+func fanInDeleteBatch(doneCh chan struct{}, resultChs ...chan error) chan error {
 	finalCh := make(chan error)
 	var wg sync.WaitGroup
 

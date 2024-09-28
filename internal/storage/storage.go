@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
 	"github.com/sol1corejz/go-url-shortener/internal/file"
@@ -98,7 +97,7 @@ func loadURLsFromFile() error {
 	return nil
 }
 
-func SaveURL(event *models.URLData) error {
+func SaveURL(event *models.URLData) (string, error) {
 	if DB != nil {
 
 		err := DB.QueryRow(`
@@ -108,13 +107,13 @@ func SaveURL(event *models.URLData) error {
 		if err != nil {
 			if !errors.Is(err, pgx.ErrNoRows) {
 			} else {
-				return err
+				return "", err
 			}
 		}
 
 		if ExistingShortURL != "" {
 			event.ShortURL = ExistingShortURL
-			return ErrAlreadyExists
+			return ExistingShortURL, ErrAlreadyExists
 		}
 
 		_, err = DB.Exec(`
@@ -125,14 +124,14 @@ func SaveURL(event *models.URLData) error {
 		`, event.ShortURL, event.OriginalURL, event.UserUUID, event.DeletedFlag)
 
 		if err != nil {
-			return err
+			return "", err
 		}
 
-		return nil
+		return "", nil
 	} else if config.FileStoragePath != "" {
 		producer, err := file.NewProducer(config.FileStoragePath)
 		if err != nil {
-			return err
+			return "", err
 		}
 		defer producer.File.Close()
 
@@ -140,51 +139,13 @@ func SaveURL(event *models.URLData) error {
 		URLStore[event.ShortURL] = event.OriginalURL
 		Mu.Unlock()
 
-		return producer.WriteEvent(event)
+		return "", producer.WriteEvent(event)
 	}
 
 	Mu.Lock()
 	URLStore[event.ShortURL] = event.OriginalURL
 	Mu.Unlock()
-	return nil
-}
-
-func SaveSingleURL(event *models.URLData) error {
-	if DB != nil {
-		_, err := DB.Exec("INSERT INTO short_urls (short_url, original_url, user_id, is_deleted) VALUES ($1, $2, $3, $4) ON CONFLICT (original_url) DO NOTHING;", event.ShortURL, event.OriginalURL, event.UserUUID, event.DeletedFlag)
-		fmt.Println(err)
-		return err
-	} else if config.FileStoragePath != "" {
-		producer, err := file.NewProducer(config.FileStoragePath)
-		if err != nil {
-			return err
-		}
-		defer producer.File.Close()
-
-		Mu.Lock()
-		URLStore[event.ShortURL] = event.OriginalURL
-		Mu.Unlock()
-
-		return producer.WriteEvent(event)
-	}
-
-	Mu.Lock()
-	URLStore[event.ShortURL] = event.OriginalURL
-	Mu.Unlock()
-	return nil
-}
-
-func SaveBatchURL(events []models.URLData) error {
-	Mu.Lock()
-	defer Mu.Unlock()
-
-	for _, event := range events {
-		if err := SaveSingleURL(&event); err != nil {
-			return errors.New("failed to save batch URLs")
-		}
-	}
-
-	return nil
+	return "", nil
 }
 
 func GetOriginalURL(shortID string) (string, bool, bool) {
