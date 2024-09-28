@@ -152,7 +152,8 @@ func GetOriginalURL(shortID string) (string, bool, bool) {
 	if DB != nil {
 		var originalURL string
 		var deleted bool
-		err := DB.QueryRow("SELECT original_url, is_deleted, FROM short_urls WHERE short_url = $1", shortID).Scan(&originalURL, &deleted)
+		err := DB.QueryRow("SELECT original_url, is_deleted FROM short_urls WHERE short_url = $1", shortID).Scan(&originalURL, &deleted)
+
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return "", false, false

@@ -138,8 +138,6 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		fmt.Println(token)
-
 		http.SetCookie(w, &http.Cookie{
 			Name:     "token",
 			Value:    token,
@@ -283,11 +281,11 @@ func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func processBatchPost(req []models.BatchRequest, userId string, res *[]models.BatchResponse) {
+func processBatchPost(req []models.BatchRequest, userID string, res *[]models.BatchResponse) {
 	doneCh := make(chan struct{})
 	defer close(doneCh)
 
-	inputCh := generatorBatchPost(doneCh, req, userId)
+	inputCh := generatorBatchPost(doneCh, req, userID)
 	channels := fanOutBatchPost(doneCh, inputCh)
 	resultCh := fanInBatchPost(doneCh, channels...)
 
@@ -308,10 +306,10 @@ func postUrl(doneCh chan struct{}, inputCh chan models.URLData) chan models.Batc
 			shortURL, err := storage.SaveURL(&event)
 			if err != nil {
 				if errors.Is(err, storage.ErrAlreadyExists) {
-					batchResponse.ShortURL = shortURL
+					batchResponse.ShortURL = fmt.Sprintf("%s/%s", config.FlagBaseURL, shortURL)
 				}
 			} else {
-				batchResponse.ShortURL = event.ShortURL
+				batchResponse.ShortURL = fmt.Sprintf("%s/%s", config.FlagBaseURL, event.ShortURL)
 			}
 			select {
 			case <-doneCh:
@@ -323,7 +321,7 @@ func postUrl(doneCh chan struct{}, inputCh chan models.URLData) chan models.Batc
 	return resultCh
 }
 
-func generatorBatchPost(doneCh chan struct{}, data []models.BatchRequest, userId string) chan models.URLData {
+func generatorBatchPost(doneCh chan struct{}, data []models.BatchRequest, userID string) chan models.URLData {
 	inputCh := make(chan models.URLData)
 	go func() {
 		defer close(inputCh)
@@ -333,7 +331,7 @@ func generatorBatchPost(doneCh chan struct{}, data []models.BatchRequest, userId
 				ShortURL:      generateShortID(),
 				OriginalURL:   event.OriginalURL,
 				DeletedFlag:   false,
-				UserUUID:      userId,
+				UserUUID:      userID,
 				CorrelationID: event.CorrelationID,
 			}
 			select {
@@ -394,6 +392,7 @@ func HandleGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	originalURL, deleted, ok := storage.GetOriginalURL(id)
+
 	if !ok {
 		http.Error(w, "URL not found", http.StatusNotFound)
 		return
@@ -493,7 +492,7 @@ func processDeleteBatch(ids []string, userID string) {
 	}
 }
 
-func deleteUrl(doneCh chan struct{}, inputCh chan string, userID string) chan error {
+func deleteURL(doneCh chan struct{}, inputCh chan string, userID string) chan error {
 	resultCh := make(chan error)
 	go func() {
 		defer close(resultCh)
@@ -528,7 +527,7 @@ func fanOutDeleteBatch(doneCh chan struct{}, inputCh chan string, userID string)
 	numWorkers := 5
 	channels := make([]chan error, numWorkers)
 	for i := 0; i < numWorkers; i++ {
-		channels[i] = deleteUrl(doneCh, inputCh, userID)
+		channels[i] = deleteURL(doneCh, inputCh, userID)
 	}
 	return channels
 }
