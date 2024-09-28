@@ -311,7 +311,7 @@ func postUrl(doneCh chan struct{}, inputCh chan models.URLData) chan models.Batc
 					batchResponse.ShortURL = shortURL
 				}
 			} else {
-				batchResponse.ShortURL = fmt.Sprintf("%s/%s", config.FlagBaseURL, event.ShortURL)
+				batchResponse.ShortURL = event.ShortURL
 			}
 			select {
 			case <-doneCh:
