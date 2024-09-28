@@ -308,7 +308,7 @@ func postUrl(doneCh chan struct{}, inputCh chan models.URLData) chan models.Batc
 			shortURL, err := storage.SaveURL(&event)
 			if err != nil {
 				if errors.Is(err, storage.ErrAlreadyExists) {
-					batchResponse.ShortURL = fmt.Sprintf("%s/%s", config.FlagBaseURL, shortURL)
+					batchResponse.ShortURL = shortURL
 				}
 			} else {
 				batchResponse.ShortURL = fmt.Sprintf("%s/%s", config.FlagBaseURL, event.ShortURL)
