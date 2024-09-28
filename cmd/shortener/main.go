@@ -40,6 +40,7 @@ func run() error {
 	r.Post("/api/shorten/batch", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleBatchPost)))
 	r.Get("/api/user/urls", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleGetUserURLs)))
 	r.Get("/ping", logger.RequestLogger(handlers.HandlePing))
+	r.Delete("/api/user/urls", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleDeleteURLs)))
 
 	return http.ListenAndServe(config.FlagRunAddr, r)
 }

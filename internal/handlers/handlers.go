@@ -31,6 +31,19 @@ func generateShortID() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
+func checkIsAuthorized(r *http.Request) (string, error) {
+	cookie, err := r.Cookie("token")
+	if err != nil {
+		return "", err
+	}
+
+	userID := auth.GetUserID(cookie.Value)
+	if userID == "" {
+		return "", err
+	}
+	return userID, nil
+}
+
 func HandlePost(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
@@ -81,6 +94,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 		ShortURL:    shortID,
 		UUID:        uuid.New().String(),
 		UserUUID:    userID,
+		DeletedFlag: false,
 	}
 
 	select {
@@ -118,6 +132,7 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 	var userID string
 	if err != nil {
 		token, err := auth.GenerateToken()
+		fmt.Println(token)
 		if err != nil {
 			http.Error(w, "Unable to generate token", http.StatusInternalServerError)
 			return
@@ -164,6 +179,7 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		ShortURL:    shortID,
 		UUID:        uuid.New().String(),
 		UserUUID:    userID,
+		DeletedFlag: false,
 	}
 
 	select {
@@ -274,6 +290,7 @@ func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 					ShortURL:    shortID,
 					UUID:        item.CorrelationID,
 					UserUUID:    userID,
+					DeletedFlag: false,
 				}
 
 				mu.Lock()
@@ -341,14 +358,9 @@ func HandlePing(w http.ResponseWriter, r *http.Request) {
 
 func HandleGetUserURLs(w http.ResponseWriter, r *http.Request) {
 
-	cookie, err := r.Cookie("token")
-	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	userID, err := checkIsAuthorized(r)
 
-	userID := auth.GetUserID(cookie.Value)
-	if userID == "" {
+	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -369,5 +381,77 @@ func HandleGetUserURLs(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(urls); err != nil {
 		logger.Log.Error("Failed to encode response", zap.Error(err))
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+func HandleDeleteURLs(w http.ResponseWriter, r *http.Request) {
+	userID, err := checkIsAuthorized(r)
+
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req []string
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+		return
+	}
+	defer r.Body.Close()
+
+	if err = json.Unmarshal(body, &req); err != nil {
+		logger.Log.Info("cannot decode batch request JSON", zap.Error(err))
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if len(req) == 0 {
+		http.Error(w, "Batch cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	var IDs []string
+
+	err = json.NewDecoder(r.Body).Decode(&IDs)
+	if err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	doneCh := make(chan struct{})
+	defer close(doneCh)
+
+	deleteURLsFanIn(doneCh, IDs, userID)
+
+	w.WriteHeader(http.StatusAccepted)
+
+}
+
+func deleteURLsFanIn(doneCh chan struct{}, urlIDs []string, userID string) {
+	URLJobs := make(chan string, len(urlIDs))
+
+	for w := 0; w < 4; w++ {
+		go deleteURL(doneCh, URLJobs, userID)
+	}
+
+	for _, id := range urlIDs {
+		URLJobs <- id
+	}
+	close(URLJobs)
+}
+
+func deleteURL(doneCh chan struct{}, URLs chan string, userID string) {
+	for id := range URLs {
+		select {
+		case <-doneCh:
+			return
+		default:
+			err := storage.BatchUpdateDeleteFlag(id, userID)
+			if err != nil {
+				logger.Log.Error("Error deleting URL:", zap.Error(err))
+			}
+		}
 	}
 }

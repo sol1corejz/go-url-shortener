@@ -41,24 +41,25 @@ func InitializeStorage(ctx context.Context) {
 				id SERIAL PRIMARY KEY,
 				short_url TEXT NOT NULL UNIQUE,
 				original_url TEXT NOT NULL UNIQUE,
-			    user_id TEXT NOT NULL
+			    user_id TEXT NOT NULL,
+			    is_deleted BOOLEAN NOT NULL
 			)
 		`)
 		if err != nil {
-			logger.Log.Info("Error creating table", zap.Error(err))
+			logger.Log.Error("Error creating table", zap.Error(err))
 			return
 		}
 
 		err = loadURLsFromDB()
 		if err != nil {
-			logger.Log.Info("Error loading URLs from DB", zap.Error(err))
+			logger.Log.Error("Error loading URLs from DB", zap.Error(err))
 			return
 		}
 
 	} else if config.FileStoragePath != "" {
 		err := loadURLsFromFile()
 		if err != nil {
-			logger.Log.Info("Error loading URLs from file", zap.Error(err))
+			logger.Log.Error("Error loading URLs from file", zap.Error(err))
 			return
 		}
 	}
@@ -118,11 +119,11 @@ func SaveURL(event *models.URLData) error {
 		}
 
 		_, err = DB.Exec(`
-			INSERT INTO short_urls (short_url, original_url, user_id) 
-			VALUES ($1, $2, $3) 
+			INSERT INTO short_urls (short_url, original_url, user_id, is_deleted) 
+			VALUES ($1, $2, $3, $4) 
 			ON CONFLICT (original_url)
 			DO UPDATE SET short_url = short_urls.short_url
-		`, event.ShortURL, event.OriginalURL, auth.UserUUID)
+		`, event.ShortURL, event.OriginalURL, auth.UserUUID, event.DeletedFlag)
 
 		if err != nil {
 			return err
@@ -151,7 +152,7 @@ func SaveURL(event *models.URLData) error {
 
 func SaveSingleURL(event *models.URLData) error {
 	if DB != nil {
-		_, err := DB.Exec("INSERT INTO short_urls (short_url, original_url, user_id) VALUES ($1, $2, $3) ON CONFLICT (original_url) DO NOTHING;", event.ShortURL, event.OriginalURL, auth.UserUUID)
+		_, err := DB.Exec("INSERT INTO short_urls (short_url, original_url, user_id, is_deleted) VALUES ($1, $2, $3, $4) ON CONFLICT (original_url) DO NOTHING;", event.ShortURL, event.OriginalURL, auth.UserUUID, event.DeletedFlag)
 		fmt.Println(err)
 		return err
 	} else if config.FileStoragePath != "" {
@@ -225,4 +226,10 @@ func GetURLsByUser(userID string) ([]models.URLData, error) {
 		return urls, rows.Err()
 	}
 	return nil, nil
+}
+
+func BatchUpdateDeleteFlag(urlID string, userID string) error {
+	query := `UPDATE urls SET deleted = TRUE WHERE id = $1 AND user_id = $2`
+	_, err := DB.Exec(query, urlID, userID)
+	return err
 }
