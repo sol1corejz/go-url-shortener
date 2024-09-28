@@ -48,9 +48,9 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	cookie, err := r.Cookie("Authorization")
+	cookie, err := r.Cookie("token")
 	var userID string
-	if err != nil {
+	if errors.Is(err, http.ErrNoCookie) {
 		token, err := auth.GenerateToken()
 		if err != nil {
 			http.Error(w, "Unable to generate token", http.StatusInternalServerError)
@@ -65,6 +65,9 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 		})
 
 		userID = auth.GetUserID(token)
+	} else if err != nil {
+		http.Error(w, "Error retrieving cookie", http.StatusBadRequest)
+		return
 	} else {
 		userID = auth.GetUserID(cookie.Value)
 		if userID == "" {
@@ -103,14 +106,12 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 		if err = storage.SaveURL(&event); err != nil {
-
 			if errors.Is(err, storage.ErrAlreadyExists) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusConflict)
 				w.Write([]byte(fmt.Sprintf("%s/%s", config.FlagBaseURL, storage.ExistingShortURL)))
 
 				storage.ExistingShortURL = ""
-
 				return
 			}
 
@@ -128,15 +129,16 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	cookie, err := r.Cookie("Authorization")
+	cookie, err := r.Cookie("token")
 	var userID string
-	if err != nil {
+	if errors.Is(err, http.ErrNoCookie) {
 		token, err := auth.GenerateToken()
-		fmt.Println(token)
 		if err != nil {
 			http.Error(w, "Unable to generate token", http.StatusInternalServerError)
 			return
 		}
+
+		fmt.Println(token)
 
 		http.SetCookie(w, &http.Cookie{
 			Name:     "token",
@@ -146,6 +148,9 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		})
 
 		userID = auth.GetUserID(token)
+	} else if err != nil {
+		http.Error(w, "Error retrieving cookie", http.StatusBadRequest)
+		return
 	} else {
 		userID = auth.GetUserID(cookie.Value)
 		if userID == "" {
@@ -199,7 +204,6 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 				json.NewEncoder(w).Encode(resp)
 
 				storage.ExistingShortURL = ""
-
 				return
 			}
 
@@ -211,8 +215,7 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
-	enc := json.NewEncoder(w)
-	if err := enc.Encode(resp); err != nil {
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		logger.Log.Debug("error encoding response", zap.Error(err))
 		return
 	}
@@ -222,9 +225,9 @@ func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	cookie, err := r.Cookie("Authorization")
+	cookie, err := r.Cookie("token")
 	var userID string
-	if err != nil {
+	if errors.Is(err, http.ErrNoCookie) {
 		token, err := auth.GenerateToken()
 		if err != nil {
 			http.Error(w, "Unable to generate token", http.StatusInternalServerError)
@@ -239,6 +242,9 @@ func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 		})
 
 		userID = auth.GetUserID(token)
+	} else if err != nil {
+		http.Error(w, "Error retrieving cookie", http.StatusBadRequest)
+		return
 	} else {
 		userID = auth.GetUserID(cookie.Value)
 		if userID == "" {
@@ -324,7 +330,6 @@ func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 		logger.Log.Error("Failed to encode response", zap.Error(err))
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
-
 }
 
 func HandleGet(w http.ResponseWriter, r *http.Request) {
@@ -335,9 +340,14 @@ func HandleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	originalURL, ok := storage.GetOriginalURL(id)
+	originalURL, deleted, ok := storage.GetOriginalURL(id)
 	if !ok {
 		http.Error(w, "URL not found", http.StatusNotFound)
+		return
+	}
+
+	if deleted {
+		http.Error(w, "URL deleted", http.StatusGone)
 		return
 	}
 
@@ -386,14 +396,12 @@ func HandleGetUserURLs(w http.ResponseWriter, r *http.Request) {
 
 func HandleDeleteURLs(w http.ResponseWriter, r *http.Request) {
 	userID, err := checkIsAuthorized(r)
-
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	var req []string
-
+	var ids []string
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
@@ -401,57 +409,103 @@ func HandleDeleteURLs(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	if err = json.Unmarshal(body, &req); err != nil {
+	if err = json.Unmarshal(body, &ids); err != nil {
 		logger.Log.Info("cannot decode batch request JSON", zap.Error(err))
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
-	if len(req) == 0 {
+	if len(ids) == 0 {
 		http.Error(w, "Batch cannot be empty", http.StatusBadRequest)
 		return
 	}
 
-	var IDs []string
+	w.WriteHeader(http.StatusAccepted)
 
-	err = json.NewDecoder(r.Body).Decode(&IDs)
-	if err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
+	go processDeleteBatch(ids, userID)
+}
 
+func processDeleteBatch(ids []string, userID string) {
 	doneCh := make(chan struct{})
 	defer close(doneCh)
 
-	deleteURLsFanIn(doneCh, IDs, userID)
+	inputCh := generator(doneCh, ids)
+	channels := fanOut(doneCh, inputCh, userID)
+	errorCh := fanIn(doneCh, channels...)
 
-	w.WriteHeader(http.StatusAccepted)
-
-}
-
-func deleteURLsFanIn(doneCh chan struct{}, urlIDs []string, userID string) {
-	URLJobs := make(chan string, len(urlIDs))
-
-	for w := 0; w < 4; w++ {
-		go deleteURL(doneCh, URLJobs, userID)
-	}
-
-	for _, id := range urlIDs {
-		URLJobs <- id
-	}
-	close(URLJobs)
-}
-
-func deleteURL(doneCh chan struct{}, URLs chan string, userID string) {
-	for id := range URLs {
-		select {
-		case <-doneCh:
-			return
-		default:
-			err := storage.BatchUpdateDeleteFlag(id, userID)
-			if err != nil {
-				logger.Log.Error("Error deleting URL:", zap.Error(err))
-			}
+	for err := range errorCh {
+		if err != nil {
+			logger.Log.Error("Failed to delete URL", zap.Error(err))
 		}
 	}
+}
+
+func generator(doneCh chan struct{}, ids []string) chan string {
+	inputCh := make(chan string)
+	go func() {
+		defer close(inputCh)
+		for _, id := range ids {
+			select {
+			case <-doneCh:
+				return
+			case inputCh <- id:
+			}
+		}
+	}()
+	return inputCh
+}
+
+func deleteUrl(doneCh chan struct{}, inputCh chan string, userID string) chan error {
+	resultCh := make(chan error)
+	go func() {
+		defer close(resultCh)
+		for id := range inputCh {
+			err := storage.BatchUpdateDeleteFlag(id, userID)
+			select {
+			case <-doneCh:
+				return
+			case resultCh <- err:
+			}
+		}
+	}()
+	return resultCh
+}
+
+func fanOut(doneCh chan struct{}, inputCh chan string, userID string) []chan error {
+	numWorkers := 5
+	channels := make([]chan error, numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		channels[i] = deleteUrl(doneCh, inputCh, userID)
+	}
+	return channels
+}
+
+func fanIn(doneCh chan struct{}, resultChs ...chan error) chan error {
+	finalCh := make(chan error)
+	var wg sync.WaitGroup
+
+	for _, ch := range resultChs {
+		wg.Add(1)
+
+		chClosure := ch
+
+		go func() {
+			defer wg.Done()
+
+			for err := range chClosure {
+				select {
+				case <-doneCh:
+					return
+				case finalCh <- err:
+				}
+			}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(finalCh)
+	}()
+
+	return finalCh
 }

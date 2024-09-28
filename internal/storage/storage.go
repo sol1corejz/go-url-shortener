@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
-	"github.com/sol1corejz/go-url-shortener/internal/auth"
 	"github.com/sol1corejz/go-url-shortener/internal/file"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
@@ -123,7 +122,7 @@ func SaveURL(event *models.URLData) error {
 			VALUES ($1, $2, $3, $4) 
 			ON CONFLICT (original_url)
 			DO UPDATE SET short_url = short_urls.short_url
-		`, event.ShortURL, event.OriginalURL, auth.UserUUID, event.DeletedFlag)
+		`, event.ShortURL, event.OriginalURL, event.UserUUID, event.DeletedFlag)
 
 		if err != nil {
 			return err
@@ -152,7 +151,7 @@ func SaveURL(event *models.URLData) error {
 
 func SaveSingleURL(event *models.URLData) error {
 	if DB != nil {
-		_, err := DB.Exec("INSERT INTO short_urls (short_url, original_url, user_id, is_deleted) VALUES ($1, $2, $3, $4) ON CONFLICT (original_url) DO NOTHING;", event.ShortURL, event.OriginalURL, auth.UserUUID, event.DeletedFlag)
+		_, err := DB.Exec("INSERT INTO short_urls (short_url, original_url, user_id, is_deleted) VALUES ($1, $2, $3, $4) ON CONFLICT (original_url) DO NOTHING;", event.ShortURL, event.OriginalURL, event.UserUUID, event.DeletedFlag)
 		fmt.Println(err)
 		return err
 	} else if config.FileStoragePath != "" {
@@ -188,23 +187,24 @@ func SaveBatchURL(events []models.URLData) error {
 	return nil
 }
 
-func GetOriginalURL(shortID string) (string, bool) {
+func GetOriginalURL(shortID string) (string, bool, bool) {
 	if DB != nil {
 		var originalURL string
-		err := DB.QueryRow("SELECT original_url FROM short_urls WHERE short_url = $1", shortID).Scan(&originalURL)
+		var deleted bool
+		err := DB.QueryRow("SELECT original_url, is_deleted, FROM short_urls WHERE short_url = $1", shortID).Scan(&originalURL, &deleted)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return "", false
+				return "", false, false
 			}
-			return "", false
+			return "", false, false
 		}
-		return originalURL, true
+		return originalURL, deleted, true
 	}
 
 	Mu.Lock()
 	defer Mu.Unlock()
 	originalURL, ok := URLStore[shortID]
-	return originalURL, ok
+	return originalURL, false, ok
 }
 
 func GetURLsByUser(userID string) ([]models.URLData, error) {
@@ -229,7 +229,7 @@ func GetURLsByUser(userID string) ([]models.URLData, error) {
 }
 
 func BatchUpdateDeleteFlag(urlID string, userID string) error {
-	query := `UPDATE urls SET deleted = TRUE WHERE id = $1 AND user_id = $2`
+	query := `UPDATE short_urls SET is_deleted = TRUE WHERE short_url = $1 AND user_id = $2`
 	_, err := DB.Exec(query, urlID, userID)
 	return err
 }
