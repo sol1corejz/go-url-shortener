@@ -294,7 +294,7 @@ func processBatchPost(req []models.BatchRequest, userID string, res *[]models.Ba
 	}
 }
 
-func postUrl(doneCh chan struct{}, inputCh chan models.URLData) chan models.BatchResponse {
+func postURL(doneCh chan struct{}, inputCh chan models.URLData) chan models.BatchResponse {
 	resultCh := make(chan models.BatchResponse)
 	go func() {
 		defer close(resultCh)
@@ -348,7 +348,7 @@ func fanOutBatchPost(doneCh chan struct{}, inputCh chan models.URLData) []chan m
 	numWorkers := 5
 	channels := make([]chan models.BatchResponse, numWorkers)
 	for i := 0; i < numWorkers; i++ {
-		channels[i] = postUrl(doneCh, inputCh)
+		channels[i] = postURL(doneCh, inputCh)
 	}
 	return channels
 }
