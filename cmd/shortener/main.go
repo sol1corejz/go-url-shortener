@@ -34,13 +34,19 @@ func run() error {
 
 	r := chi.NewRouter()
 
-	r.Post("/", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandlePost)))
-	r.Get("/{shortURL}", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleGet)))
-	r.Post("/api/shorten", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleJSONPost)))
-	r.Post("/api/shorten/batch", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleBatchPost)))
-	r.Get("/api/user/urls", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleGetUserURLs)))
+	r.Route("/", func(r chi.Router) {
+		r.Post("/", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandlePost)))
+		r.Get("/{shortURL}", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleGet)))
+	})
+
+	r.Route("/api", func(r chi.Router) {
+		r.Post("/shorten", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleJSONPost)))
+		r.Post("/shorten/batch", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleBatchPost)))
+		r.Get("/user/urls", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleGetUserURLs)))
+		r.Delete("/user/urls", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleDeleteURLs)))
+	})
+
 	r.Get("/ping", logger.RequestLogger(handlers.HandlePing))
-	r.Delete("/api/user/urls", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleDeleteURLs)))
 
 	return http.ListenAndServe(config.FlagRunAddr, r)
 }
