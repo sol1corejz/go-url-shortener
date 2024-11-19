@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"net/http/pprof"
+	_ "net/http/pprof"
+
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
@@ -10,7 +14,6 @@ import (
 	"github.com/sol1corejz/go-url-shortener/internal/middlewares"
 	"github.com/sol1corejz/go-url-shortener/internal/storage"
 	"go.uber.org/zap"
-	"net/http"
 )
 
 func main() {
@@ -33,6 +36,13 @@ func run() error {
 	logger.Log.Info("Running server", zap.String("address", config.FlagRunAddr))
 
 	r := chi.NewRouter()
+
+	r.Mount("/debug/pprof", http.StripPrefix("/debug/pprof", http.HandlerFunc(pprof.Index)))
+	r.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
+	r.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
+	r.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
+	r.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
+	r.Handle("/debug/pprof/heap", http.HandlerFunc(pprof.Index))
 
 	r.Route("/", func(r chi.Router) {
 		r.Post("/", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandlePost)))
