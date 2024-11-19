@@ -4,10 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
-	"github.com/sol1corejz/go-url-shortener/internal/auth"
 	"github.com/sol1corejz/go-url-shortener/internal/file"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
@@ -41,24 +39,25 @@ func InitializeStorage(ctx context.Context) {
 				id SERIAL PRIMARY KEY,
 				short_url TEXT NOT NULL UNIQUE,
 				original_url TEXT NOT NULL UNIQUE,
-			    user_id TEXT NOT NULL
+			    user_id TEXT NOT NULL,
+			    is_deleted BOOLEAN NOT NULL
 			)
 		`)
 		if err != nil {
-			logger.Log.Info("Error creating table", zap.Error(err))
+			logger.Log.Error("Error creating table", zap.Error(err))
 			return
 		}
 
 		err = loadURLsFromDB()
 		if err != nil {
-			logger.Log.Info("Error loading URLs from DB", zap.Error(err))
+			logger.Log.Error("Error loading URLs from DB", zap.Error(err))
 			return
 		}
 
 	} else if config.FileStoragePath != "" {
 		err := loadURLsFromFile()
 		if err != nil {
-			logger.Log.Info("Error loading URLs from file", zap.Error(err))
+			logger.Log.Error("Error loading URLs from file", zap.Error(err))
 			return
 		}
 	}
@@ -98,7 +97,7 @@ func loadURLsFromFile() error {
 	return nil
 }
 
-func SaveURL(event *models.URLData) error {
+func SaveURL(event *models.URLData) (string, error) {
 	if DB != nil {
 
 		err := DB.QueryRow(`
@@ -108,31 +107,31 @@ func SaveURL(event *models.URLData) error {
 		if err != nil {
 			if !errors.Is(err, pgx.ErrNoRows) {
 			} else {
-				return err
+				return "", err
 			}
 		}
 
 		if ExistingShortURL != "" {
 			event.ShortURL = ExistingShortURL
-			return ErrAlreadyExists
+			return ExistingShortURL, ErrAlreadyExists
 		}
 
 		_, err = DB.Exec(`
-			INSERT INTO short_urls (short_url, original_url, user_id) 
-			VALUES ($1, $2, $3) 
+			INSERT INTO short_urls (short_url, original_url, user_id, is_deleted) 
+			VALUES ($1, $2, $3, $4) 
 			ON CONFLICT (original_url)
 			DO UPDATE SET short_url = short_urls.short_url
-		`, event.ShortURL, event.OriginalURL, auth.UserUUID)
+		`, event.ShortURL, event.OriginalURL, event.UserUUID, event.DeletedFlag)
 
 		if err != nil {
-			return err
+			return "", err
 		}
 
-		return nil
+		return "", nil
 	} else if config.FileStoragePath != "" {
 		producer, err := file.NewProducer(config.FileStoragePath)
 		if err != nil {
-			return err
+			return "", err
 		}
 		defer producer.File.Close()
 
@@ -140,70 +139,34 @@ func SaveURL(event *models.URLData) error {
 		URLStore[event.ShortURL] = event.OriginalURL
 		Mu.Unlock()
 
-		return producer.WriteEvent(event)
+		return "", producer.WriteEvent(event)
 	}
 
 	Mu.Lock()
 	URLStore[event.ShortURL] = event.OriginalURL
 	Mu.Unlock()
-	return nil
+	return "", nil
 }
 
-func SaveSingleURL(event *models.URLData) error {
-	if DB != nil {
-		_, err := DB.Exec("INSERT INTO short_urls (short_url, original_url, user_id) VALUES ($1, $2, $3) ON CONFLICT (original_url) DO NOTHING;", event.ShortURL, event.OriginalURL, auth.UserUUID)
-		fmt.Println(err)
-		return err
-	} else if config.FileStoragePath != "" {
-		producer, err := file.NewProducer(config.FileStoragePath)
-		if err != nil {
-			return err
-		}
-		defer producer.File.Close()
-
-		Mu.Lock()
-		URLStore[event.ShortURL] = event.OriginalURL
-		Mu.Unlock()
-
-		return producer.WriteEvent(event)
-	}
-
-	Mu.Lock()
-	URLStore[event.ShortURL] = event.OriginalURL
-	Mu.Unlock()
-	return nil
-}
-
-func SaveBatchURL(events []models.URLData) error {
-	Mu.Lock()
-	defer Mu.Unlock()
-
-	for _, event := range events {
-		if err := SaveSingleURL(&event); err != nil {
-			return errors.New("failed to save batch URLs")
-		}
-	}
-
-	return nil
-}
-
-func GetOriginalURL(shortID string) (string, bool) {
+func GetOriginalURL(shortID string) (string, bool, bool) {
 	if DB != nil {
 		var originalURL string
-		err := DB.QueryRow("SELECT original_url FROM short_urls WHERE short_url = $1", shortID).Scan(&originalURL)
+		var deleted bool
+		err := DB.QueryRow("SELECT original_url, is_deleted FROM short_urls WHERE short_url = $1", shortID).Scan(&originalURL, &deleted)
+
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return "", false
+				return "", false, false
 			}
-			return "", false
+			return "", false, false
 		}
-		return originalURL, true
+		return originalURL, deleted, true
 	}
 
 	Mu.Lock()
 	defer Mu.Unlock()
 	originalURL, ok := URLStore[shortID]
-	return originalURL, ok
+	return originalURL, false, ok
 }
 
 func GetURLsByUser(userID string) ([]models.URLData, error) {
@@ -225,4 +188,10 @@ func GetURLsByUser(userID string) ([]models.URLData, error) {
 		return urls, rows.Err()
 	}
 	return nil, nil
+}
+
+func BatchUpdateDeleteFlag(urlID string, userID string) error {
+	query := `UPDATE short_urls SET is_deleted = TRUE WHERE short_url = $1 AND user_id = $2`
+	_, err := DB.Exec(query, urlID, userID)
+	return err
 }
