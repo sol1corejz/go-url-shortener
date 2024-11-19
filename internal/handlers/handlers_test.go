@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/sol1corejz/go-url-shortener/internal/handlers"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
 )
 
@@ -21,7 +20,7 @@ func BenchmarkHandlePost(b *testing.B) {
 		req.Header.Set("Content-Type", "text/plain")
 
 		w := httptest.NewRecorder()
-		handlers.HandlePost(w, req)
+		HandlePost(w, req)
 
 		if w.Code != http.StatusCreated {
 			b.Errorf("unexpected status code: got %d, want %d", w.Code, http.StatusCreated)
@@ -43,7 +42,7 @@ func BenchmarkHandleJSONPost(b *testing.B) {
 		response := w.Result()
 		defer response.Body.Close()
 
-		handlers.HandleJSONPost(w, req)
+		HandleJSONPost(w, req)
 
 		if response.StatusCode != http.StatusCreated && response.StatusCode != http.StatusConflict {
 			b.Errorf("Unexpected status code: %d", response.StatusCode)
@@ -71,7 +70,7 @@ func BenchmarkHandleBatchPost(b *testing.B) {
 
 		w := httptest.NewRecorder()
 
-		handlers.HandleBatchPost(w, req)
+		HandleBatchPost(w, req)
 
 		if w.Code != http.StatusCreated {
 			b.Errorf("expected status %d, got %d", http.StatusCreated, w.Code)
