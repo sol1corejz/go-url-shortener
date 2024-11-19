@@ -250,12 +250,14 @@ func BenchmarkHandleJSONPost(b *testing.B) {
 		req.Header.Set("Content-Type", "application/json")
 
 		w := httptest.NewRecorder()
+		defer w.Result().Body.Close()
 
 		handlers.HandleJSONPost(w, req)
 
 		if w.Result().StatusCode != http.StatusCreated && w.Result().StatusCode != http.StatusConflict {
 			b.Errorf("Unexpected status code: %d", w.Result().StatusCode)
 		}
+
 	}
 }
 
