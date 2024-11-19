@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/pprof"
-	_ "net/http/pprof"
 
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
