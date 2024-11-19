@@ -44,7 +44,7 @@ func BenchmarkHandleJSONPost(b *testing.B) {
 
 		HandleJSONPost(w, req)
 
-		if response.StatusCode != http.StatusCreated && response.StatusCode != http.StatusConflict && response.StatusCode != http.StatusOk {
+		if response.StatusCode != http.StatusCreated && response.StatusCode != http.StatusConflict && response.StatusCode != http.StatusOK {
 			b.Errorf("Unexpected status code: %d", response.StatusCode)
 		}
 
