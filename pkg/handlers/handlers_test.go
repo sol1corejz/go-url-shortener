@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-chi/chi"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
 )
 
@@ -225,11 +223,6 @@ func ExampleHandleDeleteURLs() {
 func ExampleHandleGet() {
 	// Подготовка тестового запроса
 	req := httptest.NewRequest(http.MethodGet, "/abc123", nil)
-
-	// Устанавливаем параметр пути
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("shortURL", "abc123")
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	// Создаём ResponseRecorder для записи ответа
 	rec := httptest.NewRecorder()
