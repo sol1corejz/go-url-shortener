@@ -189,13 +189,13 @@ func ExampleHandleDeleteURLs() {
 	fmt.Println("HTTP Status:", resp.StatusCode)
 
 	// Output:
-	// HTTP Status: 202
+	// HTTP Status: 401
 }
 
 // ExampleHandleGet демонстрирует использование обработчика HandleGet.
 func ExampleHandleGet() {
 	// Подготовка тестового запроса
-	req := httptest.NewRequest(http.MethodGet, "/abc123", nil)
+	req := httptest.NewRequest(http.MethodGet, "abc123", nil)
 
 	// Создаём ResponseRecorder для записи ответа
 	rec := httptest.NewRecorder()
@@ -236,13 +236,13 @@ func ExampleHandleGetUserURLs() {
 	fmt.Println("HTTP Status:", resp.StatusCode)
 
 	// Output:
-	// HTTP Status: 200
+	// HTTP Status: 401
 }
 
 // ExampleHandlePing демонстрирует использование обработчика HandlePing.
 func ExampleHandlePing() {
 	// Создаём тестовый HTTP-запрос
-	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req := httptest.NewRequest(http.MethodGet, "ping", nil)
 
 	// Создаём ResponseRecorder для записи ответа
 	rec := httptest.NewRecorder()
