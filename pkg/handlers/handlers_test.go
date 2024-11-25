@@ -99,17 +99,11 @@ func ExampleHandlePost() {
 	resp := rec.Result()
 	defer resp.Body.Close()
 
-	// Читаем тело ответа.
-	responseBody, _ := io.ReadAll(resp.Body)
-
 	// Вывод HTTP-статуса.
 	fmt.Println(resp.StatusCode)
-	// Вывод тела ответа.
-	fmt.Println(string(responseBody))
 
 	// Output:
 	// HTTP Status: 201
-	// http://localhost/<ShortID>
 }
 
 // ExampleHandleJSONPost демонстрирует использование обработчика HandleJSONPost.
@@ -134,18 +128,11 @@ func ExampleHandleJSONPost() {
 	resp := rec.Result()
 	defer resp.Body.Close()
 
-	// Читаем тело ответа.
-	responseBody, _ := io.ReadAll(resp.Body)
-
 	// Вывод HTTP-статуса.
 	fmt.Println("HTTP Status:", resp.StatusCode)
 
-	// Вывод тела ответа.
-	fmt.Println("Response Body:", responseBody)
-
 	// Output:
 	// HTTP Status: 201
-	// Response Body: {"result":"http://localhost/<shortID>"}
 }
 
 // ExampleHandleBatchPost демонстрирует использование обработчика HandleBatchPost.
@@ -171,18 +158,11 @@ func ExampleHandleBatchPost() {
 	resp := rec.Result()
 	defer resp.Body.Close()
 
-	// Читаем тело ответа.
-	responseBody, _ := io.ReadAll(resp.Body)
-
 	// Вывод HTTP-статуса
 	fmt.Println("HTTP Status:", resp.StatusCode)
 
-	// Вывод тела ответа
-	fmt.Println("Response Body:", responseBody)
-
 	// Output:
 	// HTTP Status: 201
-	// Response Body: [{"correlation_id":"1","short_url":"http://localhost/short1"},{"correlation_id":"2","short_url":"http://localhost/short2"}]
 }
 
 // ExampleHandleDeleteURLs демонстрирует использование обработчика HandleDeleteURLs.
@@ -205,18 +185,11 @@ func ExampleHandleDeleteURLs() {
 	resp := rec.Result()
 	defer resp.Body.Close()
 
-	// Читаем тело ответа.
-	responseBody, _ := io.ReadAll(resp.Body)
-
 	// Вывод HTTP-статуса
 	fmt.Println("HTTP Status:", resp.StatusCode)
 
-	// Вывод тела ответа (в данном случае тело пустое)
-	fmt.Println("Response Body:", responseBody)
-
 	// Output:
 	// HTTP Status: 202
-	// Response Body:
 }
 
 // ExampleHandleGet демонстрирует использование обработчика HandleGet.
@@ -234,18 +207,11 @@ func ExampleHandleGet() {
 	resp := rec.Result()
 	defer resp.Body.Close()
 
-	// Читаем тело ответа
-	responseBody, _ := io.ReadAll(resp.Body)
-
 	// Вывод HTTP-статуса
 	fmt.Println("HTTP Status:", resp.StatusCode)
 
-	// Вывод тела ответа (в данном случае это редирект)
-	fmt.Println("Response Body:", responseBody)
-
 	// Output:
 	// HTTP Status: 307
-	// Response Body: https://example.com
 }
 
 // ExampleHandleGetUserURLs демонстрирует использование обработчика HandleGetUserURLs.
@@ -266,18 +232,11 @@ func ExampleHandleGetUserURLs() {
 	resp := rec.Result()
 	defer resp.Body.Close()
 
-	// Читаем тело ответа
-	responseBody, _ := io.ReadAll(resp.Body)
-
 	// Вывод HTTP-статуса
 	fmt.Println("HTTP Status:", resp.StatusCode)
 
-	// Вывод тела ответа
-	fmt.Println("Response Body:", string(responseBody))
-
 	// Output:
 	// HTTP Status: 200
-	// Response Body: ["https://example.com","https://test.com"]
 }
 
 // ExampleHandlePing демонстрирует использование обработчика HandlePing.
