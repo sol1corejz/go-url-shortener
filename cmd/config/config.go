@@ -1,3 +1,4 @@
+// Package config отвечает за чтение конфигурации приложения из переменных окружения и флагов.
 package config
 
 import (
@@ -5,16 +6,24 @@ import (
 	"os"
 )
 
+// Переменные для хранения значений env и флагов.
 var (
-	FlagRunAddr     string
-	FlagBaseURL     string
-	FlagLogLevel    string
+	// FlagRunAddr содержит адрес и порт для запуска сервера.
+	FlagRunAddr string
+	// FlagBaseURL содержит базовый URL для сокращенных ссылок.
+	FlagBaseURL string
+	// FlagLogLevel задает уровень логирования приложения.
+	FlagLogLevel string
+	// FileStoragePath определяет путь к файлу для хранения данных.
 	FileStoragePath string
-	DatabaseDSN     string
+	// DatabaseDSN содержит строку подключения к базе данных.
+	DatabaseDSN string
 )
 
+// ParseFlags читает флаги командной строки и переменные окружения.
+// Если указаны как флаги, так и переменные окружения, приоритет имеют значения из переменных окружения.
 func ParseFlags() {
-
+	// Инициализация флагов командной строки.
 	flag.StringVar(&FlagRunAddr, "a", ":8080", "address and port to run server")
 	flag.StringVar(&FlagBaseURL, "b", "http://localhost:8080", "base URL for shortened links")
 	flag.StringVar(&FlagLogLevel, "l", "info", "log level")
@@ -22,6 +31,7 @@ func ParseFlags() {
 	flag.StringVar(&DatabaseDSN, "d", "", "databse dsn")
 	flag.Parse()
 
+	// Переопределение значений флагов переменными окружения (если они заданы).
 	if envRunAddr := os.Getenv("SERVER_ADDRESS"); envRunAddr != "" {
 		FlagRunAddr = envRunAddr
 	}

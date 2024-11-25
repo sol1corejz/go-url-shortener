@@ -3,17 +3,18 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/go-chi/chi/v5"
-	"github.com/sol1corejz/go-url-shortener/cmd/config"
-	"github.com/sol1corejz/go-url-shortener/internal/handlers"
-	"github.com/sol1corejz/go-url-shortener/internal/models"
-	"github.com/sol1corejz/go-url-shortener/internal/storage"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/sol1corejz/go-url-shortener/cmd/config"
+	"github.com/sol1corejz/go-url-shortener/internal/models"
+	"github.com/sol1corejz/go-url-shortener/internal/storage"
+	"github.com/sol1corejz/go-url-shortener/pkg/handlers"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
