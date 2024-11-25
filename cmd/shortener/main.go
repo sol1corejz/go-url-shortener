@@ -18,7 +18,7 @@ import (
 
 // main — основная функция, которая запускает приложение.
 // Здесь производится обработка флагов конфигурации, инициализация хранилища и вызов функции запуска сервера.
-func Main() {
+func main() {
 	// Считывает флаги конфигурации и обновляет параметры запуска.
 	config.ParseFlags()
 
@@ -29,7 +29,7 @@ func Main() {
 	storage.InitializeStorage(ctx)
 
 	// Запускает сервер. Если возникает ошибка, приложение завершает работу.
-	if err := Run(); err != nil {
+	if err := run(); err != nil {
 		logger.Log.Fatal("Failed to run server", zap.Error(err))
 	}
 }
@@ -49,7 +49,7 @@ func Main() {
 // Middleware:
 // - GzipMiddleware: Сжатие/распаковка данных для оптимизации запросов.
 // - RequestLogger: Логирование каждого входящего запроса.
-func Run() error {
+func run() error {
 	// Инициализирует логгер с заданным уровнем логирования.
 	if err := logger.Initialize(config.FlagLogLevel); err != nil {
 		return err
