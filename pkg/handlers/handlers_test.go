@@ -100,7 +100,7 @@ func ExampleHandlePost() {
 	defer resp.Body.Close()
 
 	// Вывод HTTP-статуса.
-	fmt.Println(resp.StatusCode)
+	fmt.Println("HTTP Status:", resp.StatusCode)
 
 	// Output:
 	// HTTP Status: 201
