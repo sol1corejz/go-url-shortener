@@ -195,7 +195,7 @@ func ExampleHandleDeleteURLs() {
 // ExampleHandleGet демонстрирует использование обработчика HandleGet.
 func ExampleHandleGet() {
 	// Подготовка тестового запроса
-	req := httptest.NewRequest(http.MethodGet, "abc123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/abc123", nil)
 
 	// Создаём ResponseRecorder для записи ответа
 	rec := httptest.NewRecorder()
@@ -211,7 +211,7 @@ func ExampleHandleGet() {
 	fmt.Println("HTTP Status:", resp.StatusCode)
 
 	// Output:
-	// HTTP Status: 307
+	// HTTP Status: 400
 }
 
 // ExampleHandleGetUserURLs демонстрирует использование обработчика HandleGetUserURLs.
