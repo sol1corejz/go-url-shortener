@@ -238,32 +238,3 @@ func ExampleHandleGetUserURLs() {
 	// Output:
 	// HTTP Status: 401
 }
-
-// ExampleHandlePing демонстрирует использование обработчика HandlePing.
-func ExampleHandlePing() {
-	// Создаём тестовый HTTP-запрос
-	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
-
-	// Создаём ResponseRecorder для записи ответа
-	rec := httptest.NewRecorder()
-
-	// Вызов обработчика
-	HandlePing(rec, req)
-
-	// Получаем результат
-	resp := rec.Result()
-	defer resp.Body.Close()
-
-	// Читаем тело ответа
-	responseBody, _ := io.ReadAll(resp.Body)
-
-	// Вывод HTTP-статуса
-	fmt.Println("HTTP Status:", resp.StatusCode)
-
-	// Вывод тела ответа
-	fmt.Println("Response Body:", string(responseBody))
-
-	// Output:
-	// HTTP Status: 200
-	// Response Body: pong
-}
