@@ -242,7 +242,7 @@ func ExampleHandleGetUserURLs() {
 // ExampleHandlePing демонстрирует использование обработчика HandlePing.
 func ExampleHandlePing() {
 	// Создаём тестовый HTTP-запрос
-	req := httptest.NewRequest(http.MethodGet, "ping", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
 
 	// Создаём ResponseRecorder для записи ответа
 	rec := httptest.NewRecorder()
