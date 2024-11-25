@@ -2,8 +2,9 @@ package file
 
 import (
 	"encoding/json"
-	"github.com/sol1corejz/go-url-shortener/internal/models"
 	"os"
+
+	"github.com/sol1corejz/go-url-shortener/internal/models"
 )
 
 type Producer struct {

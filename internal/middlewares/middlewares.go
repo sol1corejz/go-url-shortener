@@ -1,9 +1,10 @@
 package middlewares
 
 import (
-	"github.com/sol1corejz/go-url-shortener/cmd/gzip"
 	"net/http"
 	"strings"
+
+	"github.com/sol1corejz/go-url-shortener/cmd/gzip"
 )
 
 func GzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
