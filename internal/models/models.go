@@ -32,16 +32,16 @@ type URLData struct {
 	// OriginalURL — оригинальный URL, на который ссылается сокращённый URL.
 	OriginalURL string `json:"original_url"`
 
-	// DeletedFlag — флаг, указывающий на то, был ли удалён этот URL.
-	// Если значение true, URL был удалён.
-	DeletedFlag bool `json:"is_deleted"`
-
 	// UserUUID — уникальный идентификатор пользователя, который создал этот URL.
 	UserUUID string `json:"user_uuid"`
 
 	// CorrelationID — идентификатор для отслеживания запросов в системе,
 	// используется для связывания запросов и ответов.
 	CorrelationID string `json:"correlation_id"`
+
+	// DeletedFlag — флаг, указывающий на то, был ли удалён этот URL.
+	// Если значение true, URL был удалён.
+	DeletedFlag bool `json:"is_deleted"`
 }
 
 // BatchRequest представляет структуру для пакетных запросов на создание

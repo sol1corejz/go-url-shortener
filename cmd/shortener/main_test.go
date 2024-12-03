@@ -1,5 +1,7 @@
 package main
 
+//lint:file-ignore
+
 import (
 	"bytes"
 	"encoding/json"
@@ -156,8 +158,8 @@ func Test_handleGet(t *testing.T) {
 func Test_handleJSONPost(t *testing.T) {
 	type want struct {
 		code        int
-		contentType string
 		result      models.Response
+		contentType string
 	}
 	tests := []struct {
 		name    string
