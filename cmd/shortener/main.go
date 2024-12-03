@@ -30,7 +30,7 @@ func main() {
 
 	// Запускает сервер. Если возникает ошибка, приложение завершает работу.
 	if err := run(); err != nil {
-		logger.Log.Fatal("Failed to run server", zap.Error(err))
+		logger.Log.Error("Failed to run server", zap.Error(err))
 	}
 }
 
