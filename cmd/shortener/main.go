@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/pprof"
 
@@ -16,9 +17,21 @@ import (
 	"go.uber.org/zap"
 )
 
+// Глобальные переменные для информации о версии сборки.
+var (
+	buildVersion = "N/A" // Версия сборки, передается на этапе компиляции.
+	buildDate    = "N/A" // Дата сборки, передается на этапе компиляции.
+	buildCommit  = "N/A" // Коммит сборки, передается на этапе компиляции.
+)
+
 // main — основная функция, которая запускает приложение.
 // Здесь производится обработка флагов конфигурации, инициализация хранилища и вызов функции запуска сервера.
 func main() {
+	// Вывод информации о версии сборки.
+	fmt.Printf("Build version: %s\n", buildVersion)
+	fmt.Printf("Build date: %s\n", buildDate)
+	fmt.Printf("Build commit: %s\n", buildCommit)
+
 	// Считывает флаги конфигурации и обновляет параметры запуска.
 	config.ParseFlags()
 
