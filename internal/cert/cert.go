@@ -17,6 +17,7 @@ import (
 	"time"
 )
 
+// Переменные для хранения данных сертификата
 const (
 	// CertificateFilePath задаёт путь к файлу для хранения сгенерированного TLS-сертификата.
 	CertificateFilePath = "server.crt"
