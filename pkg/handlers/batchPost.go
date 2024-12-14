@@ -35,8 +35,9 @@ func HandleBatchPost(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("token")
 	var userID string
 	if errors.Is(err, http.ErrNoCookie) {
+		var token string
 		// Если токен отсутствует, генерируем новый
-		token, err := auth.GenerateToken()
+		token, err = auth.GenerateToken()
 		if err != nil {
 			http.Error(w, "Unable to generate token", http.StatusInternalServerError)
 			return

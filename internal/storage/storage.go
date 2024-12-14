@@ -45,7 +45,7 @@ func InitializeStorage(ctx context.Context) {
 		// Подключение к базе данных.
 		db, err := sql.Open("pgx", config.DatabaseDSN)
 		if err != nil {
-			logger.Log.Fatal("Error opening database connection", zap.Error(err))
+			logger.Log.Error("Error opening database connection", zap.Error(err))
 			return
 		}
 

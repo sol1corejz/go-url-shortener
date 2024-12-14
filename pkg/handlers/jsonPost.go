@@ -35,8 +35,9 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("token")
 	var userID string
 	if errors.Is(err, http.ErrNoCookie) {
+		var token string
 		// Если токен отсутствует, генерируется новый токен и устанавливается в cookie.
-		token, err := auth.GenerateToken()
+		token, err = auth.GenerateToken()
 		if err != nil {
 			http.Error(w, "Unable to generate token", http.StatusInternalServerError)
 			return
@@ -110,7 +111,7 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusConflict)
 
-				resp := models.Response{
+				resp = models.Response{
 					Result: fmt.Sprintf("%s/%s", config.FlagBaseURL, existURL),
 				}
 				json.NewEncoder(w).Encode(resp)
