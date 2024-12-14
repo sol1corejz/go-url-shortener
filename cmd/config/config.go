@@ -18,6 +18,8 @@ var (
 	FileStoragePath string
 	// DatabaseDSN содержит строку подключения к базе данных.
 	DatabaseDSN string
+	// EnableHTTPS определяет тип соединения.
+	EnableHTTPS string
 )
 
 // ParseFlags читает флаги командной строки и переменные окружения.
@@ -29,6 +31,7 @@ func ParseFlags() {
 	flag.StringVar(&FlagLogLevel, "l", "info", "log level")
 	flag.StringVar(&FileStoragePath, "f", "", "file storage path")
 	flag.StringVar(&DatabaseDSN, "d", "", "databse dsn")
+	flag.StringVar(&EnableHTTPS, "s", "", "connection type")
 	flag.Parse()
 
 	// Переопределение значений флагов переменными окружения (если они заданы).
@@ -46,5 +49,9 @@ func ParseFlags() {
 
 	if databaseDsn := os.Getenv("DATABASE_DSN"); databaseDsn != "" {
 		DatabaseDSN = databaseDsn
+	}
+
+	if enableHTTPS := os.Getenv("ENABLE_HTTPS"); enableHTTPS != "" {
+		EnableHTTPS = enableHTTPS
 	}
 }
