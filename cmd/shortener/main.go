@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/sol1corejz/go-url-shortener/internal/cert"
 	"net/http"
 	"net/http/pprof"
 
@@ -98,6 +99,10 @@ func run() error {
 	// Добавляет маршрут для проверки доступности сервера.
 	r.Get("/ping", logger.RequestLogger(handlers.HandlePing))
 
-	// Запускает HTTP-сервер на заданном адресе.
+	// Запускает HTTP-сервер на заданном адресе и типе подключения.
+	if config.EnableHTTPS != "" {
+		certPEM, privateKeyPEM := cert.GenerateCert()
+		return http.ListenAndServeTLS(config.FlagRunAddr, certPEM, privateKeyPEM, r)
+	}
 	return http.ListenAndServe(config.FlagRunAddr, r)
 }
