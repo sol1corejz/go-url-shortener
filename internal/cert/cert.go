@@ -11,10 +11,16 @@ import (
 	"go.uber.org/zap"
 	"math/big"
 	"net"
+	"os"
 	"time"
 )
 
-func GenerateCert() (string, string) {
+const (
+	CertificateFilePath = "server.crt"
+	KeyFilePath         = "server.key"
+)
+
+func GenerateCert() ([]byte, []byte) {
 	// создаём шаблон сертификата
 	cert := &x509.Certificate{
 		// указываем уникальный номер сертификата
@@ -65,5 +71,23 @@ func GenerateCert() (string, string) {
 		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
 	})
 
-	return certPEM.String(), privateKeyPEM.String()
+	return certPEM.Bytes(), privateKeyPEM.Bytes()
+}
+
+// Проверяет существование сертификата и ключа
+func CertExists() bool {
+	_, certErr := os.Stat(CertificateFilePath)
+	_, keyErr := os.Stat(KeyFilePath)
+	return certErr == nil && keyErr == nil
+}
+
+// Сохраняет сертификат и ключ в файлы
+func SaveCert(certPEM, keyPEM []byte) error {
+	if err := os.WriteFile(CertificateFilePath, certPEM, 0600); err != nil {
+		return err
+	}
+	if err := os.WriteFile(KeyFilePath, keyPEM, 0600); err != nil {
+		return err
+	}
+	return nil
 }

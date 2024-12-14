@@ -101,8 +101,16 @@ func run() error {
 
 	// Запускает HTTP-сервер на заданном адресе и типе подключения.
 	if config.EnableHTTPS != "" {
-		certPEM, privateKeyPEM := cert.GenerateCert()
-		return http.ListenAndServeTLS(config.FlagRunAddr, certPEM, privateKeyPEM, r)
+		if !cert.CertExists() {
+			logger.Log.Info("Generating new TLS certificate")
+			certPEM, keyPEM := cert.GenerateCert()
+			if err := cert.SaveCert(certPEM, keyPEM); err != nil {
+				return fmt.Errorf("failed to save TLS certificate: %w", err)
+			}
+		}
+
+		logger.Log.Info("Loading existing TLS certificate")
+		return http.ListenAndServeTLS(config.FlagRunAddr, cert.CertificateFilePath, cert.KeyFilePath, r)
 	}
 	return http.ListenAndServe(config.FlagRunAddr, r)
 }
