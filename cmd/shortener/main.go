@@ -100,7 +100,7 @@ func run() error {
 	r.Get("/ping", logger.RequestLogger(handlers.HandlePing))
 
 	// Запускает HTTP-сервер на заданном адресе и типе подключения.
-	if config.EnableHTTPS != "" {
+	if config.EnableHTTPS {
 		if !cert.CertExists() {
 			logger.Log.Info("Generating new TLS certificate")
 			certPEM, keyPEM := cert.GenerateCert()
