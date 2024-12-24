@@ -13,7 +13,6 @@ import (
 	"github.com/sol1corejz/go-url-shortener/internal/storage"
 	"github.com/sol1corejz/go-url-shortener/pkg/handlers"
 	"go.uber.org/zap"
-	"log"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -119,22 +118,20 @@ func run(ctx context.Context, sigint chan os.Signal, idleConnsClosed chan struct
 		Handler: r,
 	}
 
-	// Горутину для обработки пойманных прерываний
+	// Горутина для обработки сигнала завершения
 	go func() {
-		// читаем из канала прерываний
 		<-sigint
-		// получили сигнал os.Interrupt, запускаем процедуру graceful shutdown
-		if err := srv.Shutdown(ctx); err != nil {
-			// ошибки закрытия Listener
-			log.Printf("HTTP server Shutdown: %v", err)
-		}
-		// сообщаем основному потоку,
-		// что все сетевые соединения обработаны и закрыты
-		close(idleConnsClosed)
 
+		// Закрываем сервер
+		if err := srv.Shutdown(ctx); err != nil {
+			logger.Log.Error("HTTP server Shutdown failed", zap.Error(err))
+		}
+
+		// Закрываем канал для уведомления о завершении
+		close(idleConnsClosed)
 	}()
 
-	// Запускает HTTP-сервер на заданном адресе и типе подключения.
+	// Запускаем сервер
 	if config.EnableHTTPS {
 		if !cert.CertExists() {
 			logger.Log.Info("Generating new TLS certificate")
@@ -145,7 +142,7 @@ func run(ctx context.Context, sigint chan os.Signal, idleConnsClosed chan struct
 		}
 
 		logger.Log.Info("Loading existing TLS certificate")
-		return http.ListenAndServeTLS(config.FlagRunAddr, cert.CertificateFilePath, cert.KeyFilePath, r)
+		return srv.ListenAndServeTLS(cert.CertificateFilePath, cert.KeyFilePath)
 	}
-	return http.ListenAndServe(config.FlagRunAddr, r)
+	return srv.ListenAndServe()
 }
