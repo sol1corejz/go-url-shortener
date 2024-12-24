@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -80,7 +81,7 @@ func main() {
 // - RequestLogger: Логирование каждого входящего запроса.
 func run(sigint chan os.Signal, idleConnsClosed chan struct{}) error {
 	//Контекст отмены
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Инициализирует логгер с заданным уровнем логирования.
