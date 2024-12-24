@@ -79,6 +79,10 @@ func main() {
 // - GzipMiddleware: Сжатие/распаковка данных для оптимизации запросов.
 // - RequestLogger: Логирование каждого входящего запроса.
 func run(sigint chan os.Signal, idleConnsClosed chan struct{}) error {
+	//Контекст отмены
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Инициализирует логгер с заданным уровнем логирования.
 	if err := logger.Initialize(config.FlagLogLevel); err != nil {
 		return err
@@ -124,8 +128,9 @@ func run(sigint chan os.Signal, idleConnsClosed chan struct{}) error {
 	go func() {
 		// читаем из канала прерываний
 		<-sigint
+		cancel()
 		// получили сигнал os.Interrupt, запускаем процедуру graceful shutdown
-		if err := srv.Shutdown(context.Background()); err != nil {
+		if err := srv.Shutdown(ctx); err != nil {
 			// ошибки закрытия Listener
 			log.Printf("HTTP server Shutdown: %v", err)
 		}
