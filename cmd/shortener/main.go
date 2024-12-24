@@ -5,8 +5,12 @@ import (
 	"context"
 	"fmt"
 	"github.com/sol1corejz/go-url-shortener/internal/cert"
+	"log"
 	"net/http"
 	"net/http/pprof"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -28,6 +32,13 @@ var (
 // main — основная функция, которая запускает приложение.
 // Здесь производится обработка флагов конфигурации, инициализация хранилища и вызов функции запуска сервера.
 func main() {
+	// Канал сообщения о закртии соединения
+	idleConnsClosed := make(chan struct{})
+	// Канал для перенаправления прерываний
+	sigint := make(chan os.Signal, 1)
+	// Регистрация прерываний
+	signal.Notify(sigint, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
 	// Вывод информации о версии сборки.
 	fmt.Printf("Build version: %s\n", buildVersion)
 	fmt.Printf("Build date: %s\n", buildDate)
@@ -42,10 +53,14 @@ func main() {
 	// Инициализирует хранилище на основе параметров конфигурации.
 	storage.InitializeStorage(ctx)
 
-	// Запускает сервер. Если возникает ошибка, приложение завершает работу.
-	if err := run(); err != nil {
+	// Запускает сервер, передавая канал `sigint` для обработки сигналов.
+	if err := run(sigint, idleConnsClosed); err != nil {
 		logger.Log.Error("Failed to run server", zap.Error(err))
 	}
+
+	<-idleConnsClosed
+	// Сообщение о закрытии соединения
+	logger.Log.Info("Server Shutdown gracefully")
 }
 
 // run запускает HTTP-сервер, определяет маршруты и подключает middleware.
@@ -63,7 +78,7 @@ func main() {
 // Middleware:
 // - GzipMiddleware: Сжатие/распаковка данных для оптимизации запросов.
 // - RequestLogger: Логирование каждого входящего запроса.
-func run() error {
+func run(sigint chan os.Signal, idleConnsClosed chan struct{}) error {
 	// Инициализирует логгер с заданным уровнем логирования.
 	if err := logger.Initialize(config.FlagLogLevel); err != nil {
 		return err
@@ -98,6 +113,27 @@ func run() error {
 
 	// Добавляет маршрут для проверки доступности сервера.
 	r.Get("/ping", logger.RequestLogger(handlers.HandlePing))
+
+	// Создаем сервер
+	srv := &http.Server{
+		Addr:    config.FlagRunAddr,
+		Handler: r,
+	}
+
+	// Горутину для обработки пойманных прерываний
+	go func() {
+		// читаем из канала прерываний
+		<-sigint
+		// получили сигнал os.Interrupt, запускаем процедуру graceful shutdown
+		if err := srv.Shutdown(context.Background()); err != nil {
+			// ошибки закрытия Listener
+			log.Printf("HTTP server Shutdown: %v", err)
+		}
+		// сообщаем основному потоку,
+		// что все сетевые соединения обработаны и закрыты
+		close(idleConnsClosed)
+
+	}()
 
 	// Запускает HTTP-сервер на заданном адресе и типе подключения.
 	if config.EnableHTTPS {
