@@ -9,6 +9,9 @@ import (
 	"net/http"
 )
 
+// HandleGetInternalStats обрабатывает запрос на получение статистики.
+// Количество сокращенных URL и количество уникальных пользователей
+// В случае ошибки возвращает соответствующий статус.
 func HandleGetInternalStats(w http.ResponseWriter, r *http.Request) {
 	// Получаем количество сокращённых URL
 	countURLs, err := storage.GetURLsCount()
