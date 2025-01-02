@@ -15,6 +15,7 @@ type Config struct {
 	FileStoragePath string `json:"file_storage_path"`
 	DatabaseDSN     string `json:"database_dsn"`
 	EnableHTTPS     bool   `json:"enable_https"`
+	TrustedSubnet   string `json:"trusted_subnet"`
 }
 
 // Переменные для хранения значений env и флагов.
@@ -33,6 +34,8 @@ var (
 	EnableHTTPS bool
 	// ConfigFilePath содержит путь до файла конфигурации
 	ConfigFilePath string
+	// TrustedSubnet добавляет проверку, что переданный IP-адрес клиента входит в доверенную подсеть
+	TrustedSubnet string
 )
 
 // ParseFlags читает флаги командной строки и переменные окружения.
@@ -46,6 +49,7 @@ func ParseFlags() {
 	flag.StringVar(&DatabaseDSN, "d", "", "databse dsn")
 	flag.BoolVar(&EnableHTTPS, "s", false, "connection type")
 	flag.StringVar(&ConfigFilePath, "c", "", "path to configuration JSON file")
+	flag.StringVar(&TrustedSubnet, "t", "", "trusted subnet check")
 	flag.Parse()
 
 	// Чтение значений из файла конфигурации, если он указан.
@@ -60,6 +64,7 @@ func ParseFlags() {
 		FileStoragePath = configData.FileStoragePath
 		DatabaseDSN = configData.DatabaseDSN
 		EnableHTTPS = configData.EnableHTTPS
+		TrustedSubnet = configData.TrustedSubnet
 	}
 
 	// Переопределение значений флагов переменными окружения (если они заданы).
@@ -81,6 +86,10 @@ func ParseFlags() {
 
 	if enableHTTPS := os.Getenv("ENABLE_HTTPS"); enableHTTPS != "" {
 		EnableHTTPS = true
+	}
+
+	if trustedSubnet := os.Getenv("TRUSTED_SUBNET"); trustedSubnet != "" {
+		TrustedSubnet = trustedSubnet
 	}
 }
 

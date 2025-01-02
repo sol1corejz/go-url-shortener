@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/jackc/pgx/v5"
@@ -233,4 +234,34 @@ func BatchUpdateDeleteFlag(urlID string, userID string) error {
 	query := `UPDATE short_urls SET is_deleted = TRUE WHERE short_url = $1 AND user_id = $2`
 	_, err := DB.Exec(query, urlID, userID)
 	return err
+}
+
+// GetURLsCount возвращает количество сокращенных адресов.
+func GetURLsCount() (int, error) {
+	// Проверка на наличие соединения с бд
+	if DB == nil {
+		return 0, fmt.Errorf("database connection is not initialized")
+	}
+
+	var count int
+	err := DB.QueryRow("SELECT COUNT(*) FROM short_urls").Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// GetUsersCount возвращает количество уникальных пользователей.
+func GetUsersCount() (int, error) {
+	// Проверка на наличие соединения с бд
+	if DB == nil {
+		return 0, fmt.Errorf("database connection is not initialized")
+	}
+
+	var count int
+	err := DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM short_urls").Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get users count: %w", err)
+	}
+	return count, nil
 }

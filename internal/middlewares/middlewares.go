@@ -4,6 +4,7 @@
 package middlewares
 
 import (
+	"net"
 	"net/http"
 	"strings"
 
@@ -50,5 +51,37 @@ func GzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
 
 		// Вызываем исходный обработчик.
 		h.ServeHTTP(ow, r)
+	}
+}
+
+// TrustedSubnetMiddleware проверяет, входит ли IP клиента в доверенную подсеть.
+func TrustedSubnetMiddleware(subnet string, h http.HandlerFunc) http.HandlerFunc {
+
+	// Парсим подсеть на этапе создания middleware.
+	_, trustedNet, err := net.ParseCIDR(subnet)
+	if err != nil {
+		// Если подсеть некорректна, запрещаем доступ к эндпоинту.
+		return func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+		}
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Получаем IP клиента из заголовка.
+		clientIP := r.Header.Get("X-Real-IP")
+		if clientIP == "" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		// Парсим IP клиента.
+		ip := net.ParseIP(clientIP)
+		if ip == nil || !trustedNet.Contains(ip) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		// Вызываем исходный обработчик.
+		h.ServeHTTP(w, r)
 	}
 }

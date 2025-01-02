@@ -109,6 +109,17 @@ func run(ctx context.Context, sigint chan os.Signal, idleConnsClosed chan struct
 		r.Delete("/user/urls", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleDeleteURLs)))
 	})
 
+	// Маршрут для получения статистики
+	r.Route("/api/internal", func(r chi.Router) {
+		if config.TrustedSubnet != "" {
+			r.Get("/stats", logger.RequestLogger(middlewares.TrustedSubnetMiddleware(config.TrustedSubnet, middlewares.GzipMiddleware(handlers.HandleGetInternalStats))))
+		} else {
+			r.Get("/stats", func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "Forbidden", http.StatusForbidden)
+			})
+		}
+	})
+
 	// Добавляет маршрут для проверки доступности сервера.
 	r.Get("/ping", logger.RequestLogger(handlers.HandlePing))
 
