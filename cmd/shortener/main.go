@@ -4,17 +4,20 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/http/pprof"
-
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/sol1corejz/go-url-shortener/cmd/config"
+	"github.com/sol1corejz/go-url-shortener/internal/cert"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/middlewares"
 	"github.com/sol1corejz/go-url-shortener/internal/storage"
 	"github.com/sol1corejz/go-url-shortener/pkg/handlers"
 	"go.uber.org/zap"
+	"net/http"
+	"net/http/pprof"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 // Глобальные переменные для информации о версии сборки.
@@ -27,6 +30,16 @@ var (
 // main — основная функция, которая запускает приложение.
 // Здесь производится обработка флагов конфигурации, инициализация хранилища и вызов функции запуска сервера.
 func main() {
+	// Канал сообщения о закртии соединения
+	idleConnsClosed := make(chan struct{})
+	// Канал для перенаправления прерываний
+	sigint := make(chan os.Signal, 1)
+	// Регистрация прерываний
+	signal.Notify(sigint, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	//Контекст отмены
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Вывод информации о версии сборки.
 	fmt.Printf("Build version: %s\n", buildVersion)
 	fmt.Printf("Build date: %s\n", buildDate)
@@ -35,16 +48,17 @@ func main() {
 	// Считывает флаги конфигурации и обновляет параметры запуска.
 	config.ParseFlags()
 
-	// Создаёт контекст для управления жизненным циклом приложения.
-	ctx := context.Background()
-
 	// Инициализирует хранилище на основе параметров конфигурации.
 	storage.InitializeStorage(ctx)
 
-	// Запускает сервер. Если возникает ошибка, приложение завершает работу.
-	if err := run(); err != nil {
+	// Запускает сервер, передавая канал `sigint` для обработки сигналов.
+	if err := run(ctx, sigint, idleConnsClosed); err != nil {
 		logger.Log.Error("Failed to run server", zap.Error(err))
 	}
+
+	<-idleConnsClosed
+	// Сообщение о закрытии соединения
+	logger.Log.Info("Server Shutdown gracefully")
 }
 
 // run запускает HTTP-сервер, определяет маршруты и подключает middleware.
@@ -62,7 +76,7 @@ func main() {
 // Middleware:
 // - GzipMiddleware: Сжатие/распаковка данных для оптимизации запросов.
 // - RequestLogger: Логирование каждого входящего запроса.
-func run() error {
+func run(ctx context.Context, sigint chan os.Signal, idleConnsClosed chan struct{}) error {
 	// Инициализирует логгер с заданным уровнем логирования.
 	if err := logger.Initialize(config.FlagLogLevel); err != nil {
 		return err
@@ -98,6 +112,37 @@ func run() error {
 	// Добавляет маршрут для проверки доступности сервера.
 	r.Get("/ping", logger.RequestLogger(handlers.HandlePing))
 
-	// Запускает HTTP-сервер на заданном адресе.
-	return http.ListenAndServe(config.FlagRunAddr, r)
+	// Создаем сервер
+	srv := &http.Server{
+		Addr:    config.FlagRunAddr,
+		Handler: r,
+	}
+
+	// Горутина для обработки сигнала завершения
+	go func() {
+		<-sigint
+
+		// Закрываем сервер
+		if err := srv.Shutdown(ctx); err != nil {
+			logger.Log.Error("HTTP server Shutdown failed", zap.Error(err))
+		}
+
+		// Закрываем канал для уведомления о завершении
+		close(idleConnsClosed)
+	}()
+
+	// Запускаем сервер
+	if config.EnableHTTPS {
+		if !cert.CertExists() {
+			logger.Log.Info("Generating new TLS certificate")
+			certPEM, keyPEM := cert.GenerateCert()
+			if err := cert.SaveCert(certPEM, keyPEM); err != nil {
+				return fmt.Errorf("failed to save TLS certificate: %w", err)
+			}
+		}
+
+		logger.Log.Info("Loading existing TLS certificate")
+		return srv.ListenAndServeTLS(cert.CertificateFilePath, cert.KeyFilePath)
+	}
+	return srv.ListenAndServe()
 }
