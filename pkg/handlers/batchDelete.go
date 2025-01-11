@@ -162,7 +162,7 @@ func (s *ShortenerServer) BatchDelete(ctx context.Context, req *pb.BatchDeleteRe
 	if len(req.Ids) == 0 {
 		return &pb.BatchDeleteResponse{
 			Error: "Batch cannot be empty",
-		}, status.Errorf(codes.InvalidArgument, "Batch cannot be empty")
+		}, status.Error(codes.InvalidArgument, "Batch cannot be empty")
 	}
 
 	// Запуск асинхронного процесса удаления.

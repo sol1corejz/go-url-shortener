@@ -144,7 +144,7 @@ func (s *ShortenerServer) GetUserURLs(ctx context.Context, req *pb.GetUserURLsRe
 	if len(urls) == 0 {
 		return &pb.GetUserURLsResponse{
 			Error: "No content",
-		}, status.Errorf(http.StatusNotFound, "No content")
+		}, status.Error(http.StatusNotFound, "No content")
 	}
 
 	// Преобразование []models.URLData в []*pb.URLData

@@ -70,7 +70,7 @@ func (s *ShortenerServer) GetInternalStats(ctx context.Context, req *pb.GetInter
 	if err != nil {
 		return &pb.GetInternalStatsResponse{
 			Error: "Failed to count stats",
-		}, status.Errorf(codes.Internal, "Failed to count stats")
+		}, status.Error(codes.Internal, "Failed to count stats")
 	}
 
 	return &pb.GetInternalStatsResponse{

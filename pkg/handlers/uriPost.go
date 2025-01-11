@@ -24,14 +24,14 @@ type ShortenerServer struct {
 	pb.UnimplementedShortenerServer
 }
 
-// TimeOutErr ошибка времени выполнения
-var TimeOutErr = errors.New("request timed out")
+// ErrTimeOut ошибка времени выполнения
+var ErrTimeOut = errors.New("request timed out")
 
 // SaveShortURL содержит бизнес-логику обработки и сохранения URL.
 func SaveShortURL(ctx context.Context, originalURL, userID string) (string, error) {
 	select {
 	case <-ctx.Done():
-		return "", TimeOutErr
+		return "", ErrTimeOut
 	default:
 		// Проверка на пустой URL
 		if originalURL == "" {
@@ -129,7 +129,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(shortURL))
 			return
 		}
-		if errors.Is(err, TimeOutErr) {
+		if errors.Is(err, ErrTimeOut) {
 			http.Error(w, "Request timed out", http.StatusRequestTimeout)
 		}
 		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
@@ -150,9 +150,9 @@ func (s *ShortenerServer) CreateShortURL(ctx context.Context, req *pb.CreateShor
 	shortURL, err := SaveShortURL(ctx, originalURL, userID)
 	if err != nil {
 		if errors.Is(err, storage.ErrAlreadyExists) {
-			return &pb.CreateShortURLResponse{ShortUrl: shortURL, Error: "URL already exists"}, status.Errorf(http.StatusConflict, "URL already exists")
+			return &pb.CreateShortURLResponse{ShortUrl: shortURL, Error: "URL already exists"}, status.Error(http.StatusConflict, "URL already exists")
 		}
-		return &pb.CreateShortURLResponse{Error: "Internal server error"}, status.Errorf(http.StatusInternalServerError, "Internal server error")
+		return &pb.CreateShortURLResponse{Error: "Internal server error"}, status.Error(http.StatusInternalServerError, "Internal server error")
 	}
 
 	return &pb.CreateShortURLResponse{ShortUrl: shortURL}, nil
