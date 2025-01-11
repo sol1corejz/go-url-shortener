@@ -19,6 +19,12 @@ import (
 	"github.com/sol1corejz/go-url-shortener/cmd/gzip"
 )
 
+// Тип для userID в контексте
+type contextUserID string
+
+// Ключ для userID
+const userIDKey contextUserID = "userID"
+
 // GzipMiddleware — это промежуточный обработчик (middleware), который проверяет,
 // поддерживает ли клиент сжатие данных с использованием Gzip, и если поддерживает,
 // применяет сжатие для ответа. Если же запрос содержит сжатые данные, то он их
@@ -126,7 +132,7 @@ func AuthInterceptor(protectedMethods []string) grpc.UnaryServerInterceptor {
 		}
 
 		// Добавляем userID в контекст, чтобы другие обработчики могли его использовать.
-		ctx = context.WithValue(ctx, "userID", userID)
+		ctx = context.WithValue(ctx, userIDKey, userID)
 
 		// Пропускаем запрос дальше.
 		return handler(ctx, req)

@@ -160,7 +160,7 @@ func (s *ShortenerServer) CreateJSONShortURL(ctx context.Context, req *pb.Create
 				Error:    "URL already exists",
 			}, status.Error(http.StatusBadRequest, "URL already exists")
 		}
-		if errors.Is(err, TimeOutErr) {
+		if errors.Is(err, ErrTimeOut) {
 			return &pb.CreateJSONShortURLResponse{
 				Error: "Request timed out",
 			}, status.Error(http.StatusRequestTimeout, "Request timed out")
