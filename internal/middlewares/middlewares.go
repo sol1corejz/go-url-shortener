@@ -4,6 +4,14 @@
 package middlewares
 
 import (
+	"context"
+	"github.com/sol1corejz/go-url-shortener/internal/auth"
+	"github.com/sol1corejz/go-url-shortener/internal/logger"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"net"
 	"net/http"
 	"strings"
@@ -84,4 +92,54 @@ func TrustedSubnetMiddleware(subnet string, h http.HandlerFunc) http.HandlerFunc
 		// Вызываем исходный обработчик.
 		h.ServeHTTP(w, r)
 	}
+}
+
+// AuthInterceptor проверяет наличие и валидность токена только для определённых методов.
+func AuthInterceptor(protectedMethods []string) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		// Проверяем, требует ли метод авторизации.
+		if !requiresAuth(info.FullMethod, protectedMethods) {
+			return handler(ctx, req) // Если авторизация не требуется, просто передаем запрос дальше
+		}
+
+		// Извлечение токена из метаданных запроса.
+		var token string
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			values := md.Get("token")
+			if len(values) > 0 {
+				token = values[0]
+			}
+		}
+
+		if len(token) == 0 {
+			// Если токен отсутствует, возвращаем ошибку Unauthorized.
+			logger.Log.Info("Missing token in request", zap.String("method", info.FullMethod))
+			return nil, status.Error(codes.Unauthenticated, "missing token")
+		}
+
+		// Проверка токена.
+		userID := auth.GetUserID(token)
+		if userID == "" {
+			// Если токен недействителен, возвращаем ошибку Unauthorized.
+			logger.Log.Info("Invalid token", zap.String("method", info.FullMethod), zap.String("token", token))
+			return nil, status.Error(codes.Unauthenticated, "invalid token")
+		}
+
+		// Добавляем userID в контекст, чтобы другие обработчики могли его использовать.
+		ctx = context.WithValue(ctx, "userID", userID)
+
+		// Пропускаем запрос дальше.
+		return handler(ctx, req)
+	}
+}
+
+// requiresAuth проверяет, требует ли метод авторизации.
+func requiresAuth(method string, protectedMethods []string) bool {
+	for _, protectedMethod := range protectedMethods {
+		// Проверяем, совпадает ли метод с одним из защищённых.
+		if strings.HasPrefix(method, protectedMethod) {
+			return true
+		}
+	}
+	return false
 }

@@ -1,34 +1,49 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"github.com/sol1corejz/go-url-shortener/internal/logger"
 	"github.com/sol1corejz/go-url-shortener/internal/models"
 	"github.com/sol1corejz/go-url-shortener/internal/storage"
+	pb "github.com/sol1corejz/go-url-shortener/proto"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"net/http"
 )
 
-// HandleGetInternalStats обрабатывает запрос на получение статистики.
-// Количество сокращенных URL и количество уникальных пользователей
-// В случае ошибки возвращает соответствующий статус.
-func HandleGetInternalStats(w http.ResponseWriter, r *http.Request) {
+// FailedToCountError - ошибка подсчета из бд
+var FailedToCountError = errors.New("failed to count error")
+
+// GetStats получает информацию из бд
+func GetStats() (int, int, error) {
 	// Получаем количество сокращённых URL
 	countURLs, err := storage.GetURLsCount()
 	if err != nil {
-		// Если произошла ошибка при получении данных, возвращаем ошибку 500 (Internal Server Error).
 		logger.Log.Error("Failed to count URLs", zap.Error(err))
-		http.Error(w, "Failed to count URLs", http.StatusInternalServerError)
-		return
+		return 0, 0, FailedToCountError
 	}
 
 	// Получаем количество пользователей
 	countUsers, err := storage.GetUsersCount()
 	if err != nil {
-		// Если произошла ошибка при получении данных, возвращаем ошибку 500 (Internal Server Error).
 		logger.Log.Error("Failed to count users", zap.Error(err))
-		http.Error(w, "Failed to count users", http.StatusInternalServerError)
-		return
+		return 0, 0, FailedToCountError
+	}
+
+	return countURLs, countUsers, nil
+}
+
+// HandleGetInternalStats обрабатывает запрос на получение статистики.
+// Количество сокращенных URL и количество уникальных пользователей
+// В случае ошибки возвращает соответствующий статус.
+func HandleGetInternalStats(w http.ResponseWriter, r *http.Request) {
+	countURLs, countUsers, err := GetStats()
+	// Если произошла ошибка при получении данных, возвращаем ошибку 500 (Internal Server Error).
+	if err != nil {
+		http.Error(w, "Failed to count stats", http.StatusInternalServerError)
 	}
 
 	stats := models.InternalStatsResponse{
@@ -46,4 +61,20 @@ func HandleGetInternalStats(w http.ResponseWriter, r *http.Request) {
 		logger.Log.Error("Failed to encode response", zap.Error(err))
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
+}
+
+// GetInternalStats обрабатывает gRPC-запрос для получения статистики.
+func (s *ShortenerServer) GetInternalStats(ctx context.Context, req *pb.GetInternalStatsRequest) (*pb.GetInternalStatsResponse, error) {
+	countURLs, countUsers, err := GetStats()
+
+	if err != nil {
+		return &pb.GetInternalStatsResponse{
+			Error: "Failed to count stats",
+		}, status.Errorf(codes.Internal, "Failed to count stats")
+	}
+
+	return &pb.GetInternalStatsResponse{
+		Urls:  int32(countURLs),
+		Users: int32(countUsers),
+	}, nil
 }

@@ -12,7 +12,11 @@ import (
 	"github.com/sol1corejz/go-url-shortener/internal/middlewares"
 	"github.com/sol1corejz/go-url-shortener/internal/storage"
 	"github.com/sol1corejz/go-url-shortener/pkg/handlers"
+	pb "github.com/sol1corejz/go-url-shortener/proto"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"log"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -50,6 +54,31 @@ func main() {
 
 	// Инициализирует хранилище на основе параметров конфигурации.
 	storage.InitializeStorage(ctx)
+
+	lis, err := net.Listen("tcp", ":8081")
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	// Список методов, которые требуют авторизации.
+	protectedMethods := []string{
+		"/proto.URLShortener/BatchDelete",
+		"/proto.URLShortener/BatchPost",
+		"/proto.URLShortener/CreateShortURL",
+		"/proto.URLShortener/CreateJSONShortURL",
+		"/proto.URLShortener/GetUserURLs",
+	}
+
+	// Создание GRPC-сервера с перехватчиком авторизации.
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(middlewares.AuthInterceptor(protectedMethods)),
+	)
+	pb.RegisterShortenerServer(grpcServer, &handlers.ShortenerServer{})
+
+	log.Println("gRPC server is running on port 50051")
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
 
 	// Запускает сервер, передавая канал `sigint` для обработки сигналов.
 	if err := run(ctx, sigint, idleConnsClosed); err != nil {

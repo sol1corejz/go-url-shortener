@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	pb "github.com/sol1corejz/go-url-shortener/proto"
+	"google.golang.org/grpc/status"
 	"io"
 	"net/http"
 	"strings"
@@ -15,6 +17,51 @@ import (
 	"github.com/sol1corejz/go-url-shortener/internal/models"
 	"github.com/sol1corejz/go-url-shortener/internal/storage"
 )
+
+// ShortenerServer представляет сервер для обработки gRPC-запросов.
+// Включает методы, соответствующие gRPC-интерфейсу.
+type ShortenerServer struct {
+	pb.UnimplementedShortenerServer
+}
+
+// TimeOutErr ошибка времени выполнения
+var TimeOutErr = errors.New("request timed out")
+
+// SaveShortURL содержит бизнес-логику обработки и сохранения URL.
+func SaveShortURL(ctx context.Context, originalURL, userID string) (string, error) {
+	select {
+	case <-ctx.Done():
+		return "", TimeOutErr
+	default:
+		// Проверка на пустой URL
+		if originalURL == "" {
+			return "", errors.New("empty URL")
+		}
+
+		// Генерация короткого идентификатора
+		shortID := generateShortID()
+		shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
+
+		// Создание структуры с данными для сохранения
+		event := models.URLData{
+			OriginalURL: originalURL,
+			ShortURL:    shortID,
+			UUID:        uuid.New().String(),
+			UserUUID:    userID,
+			DeletedFlag: false,
+		}
+
+		// Попытка сохранить URL в хранилище
+		if existURL, err := storage.SaveURL(&event); err != nil {
+			if errors.Is(err, storage.ErrAlreadyExists) {
+				return fmt.Sprintf("%s/%s", config.FlagBaseURL, existURL), storage.ErrAlreadyExists
+			}
+			return "", err
+		}
+
+		return shortURL, nil
+	}
+}
 
 // HandlePost обрабатывает POST-запрос, содержащий оригинальный URL, и генерирует для него короткий URL.
 // Функция выполняет следующие действия:
@@ -34,13 +81,12 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	// Проверка наличия токена в cookie.
+	// Проверка наличия токена в cookie
 	cookie, err := r.Cookie("token")
 	var userID string
 	if errors.Is(err, http.ErrNoCookie) {
-		var token string
-		// Если токен отсутствует, генерируется новый токен и устанавливается в cookie.
-		token, err = auth.GenerateToken()
+		// Генерация нового токена
+		token, err := auth.GenerateToken()
 		if err != nil {
 			http.Error(w, "Unable to generate token", http.StatusInternalServerError)
 			return
@@ -52,14 +98,11 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 			Expires:  time.Now().Add(auth.TokenExp),
 			HttpOnly: true,
 		})
-
-		// Получаем идентификатор пользователя из токена.
 		userID = auth.GetUserID(token)
 	} else if err != nil {
 		http.Error(w, "Error retrieving cookie", http.StatusBadRequest)
 		return
 	} else {
-		// Получаем идентификатор пользователя из cookie.
 		userID = auth.GetUserID(cookie.Value)
 		if userID == "" {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
@@ -67,7 +110,7 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Чтение тела запроса.
+	// Чтение тела запроса
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
@@ -75,52 +118,42 @@ func HandlePost(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	// Преобразование тела в строку и проверка, что URL не пустой.
 	originalURL := strings.TrimSpace(string(body))
-	if originalURL == "" {
-		http.Error(w, "Empty URL", http.StatusBadRequest)
-		return
-	}
 
-	// Генерация короткого идентификатора для URL.
-	shortID := generateShortID()
-	shortURL := fmt.Sprintf("%s/%s", config.FlagBaseURL, shortID)
-
-	// Создание структуры с данными для сохранения.
-	event := models.URLData{
-		OriginalURL: originalURL,
-		ShortURL:    shortID,
-		UUID:        uuid.New().String(),
-		UserUUID:    userID,
-		DeletedFlag: false,
-	}
-
-	// Ожидание завершения операции сохранения URL или тайм-аута.
-	select {
-	case <-ctx.Done():
-		http.Error(w, "Request canceled or timed out", http.StatusRequestTimeout)
-		return
-	default:
-		// Попытка сохранить URL в хранилище.
-		if existURL, err := storage.SaveURL(&event); err != nil {
-			// Если URL уже существует, возвращаем существующий короткий URL с кодом 409.
-			if errors.Is(err, storage.ErrAlreadyExists) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusConflict)
-				w.Write([]byte(fmt.Sprintf("%s/%s", config.FlagBaseURL, existURL)))
-
-				storage.ExistingShortURL = ""
-				return
-			}
-
-			// Ошибка при сохранении URL.
-			http.Error(w, "Failed to save URL", http.StatusInternalServerError)
+	// Используем общую бизнес-логику
+	shortURL, err := SaveShortURL(ctx, originalURL, userID)
+	if err != nil {
+		if errors.Is(err, storage.ErrAlreadyExists) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte(shortURL))
 			return
 		}
+		if errors.Is(err, TimeOutErr) {
+			http.Error(w, "Request timed out", http.StatusRequestTimeout)
+		}
+		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
+		return
 	}
 
-	// Устанавливаем заголовок и возвращаем успешный ответ с созданным коротким URL.
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(shortURL))
+}
+
+// CreateShortURL обрабатывает gRPC-запрос для создания короткого URL.
+func (s *ShortenerServer) CreateShortURL(ctx context.Context, req *pb.CreateShortURLRequest) (*pb.CreateShortURLResponse, error) {
+	userID := req.UserId
+	originalURL := req.OriginalUrl
+
+	// Используем общую бизнес-логику
+	shortURL, err := SaveShortURL(ctx, originalURL, userID)
+	if err != nil {
+		if errors.Is(err, storage.ErrAlreadyExists) {
+			return &pb.CreateShortURLResponse{ShortUrl: shortURL, Error: "URL already exists"}, status.Errorf(http.StatusConflict, "URL already exists")
+		}
+		return &pb.CreateShortURLResponse{Error: "Internal server error"}, status.Errorf(http.StatusInternalServerError, "Internal server error")
+	}
+
+	return &pb.CreateShortURLResponse{ShortUrl: shortURL}, nil
 }
