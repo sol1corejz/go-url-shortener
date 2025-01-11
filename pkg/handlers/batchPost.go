@@ -1,9 +1,13 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	pb "github.com/sol1corejz/go-url-shortener/proto"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"io"
 	"net/http"
 	"sync"
@@ -206,4 +210,47 @@ func fanInBatchPost(doneCh chan struct{}, resultChs ...chan models.BatchResponse
 	}()
 
 	return finalCh
+}
+
+// BatchPost обрабатывает gRPC-запрос на сокращение массива URL.
+func (s *ShortenerServer) BatchPost(ctx context.Context, req *pb.BatchPostRequest) (*pb.BatchPostResponse, error) {
+	// Проверяем аутентификацию
+	userID := req.UserId
+	if userID == "" {
+		return &pb.BatchPostResponse{
+			Error: "Invalid or missing token",
+		}, status.Error(codes.Unauthenticated, "Invalid or missing token")
+	}
+
+	// Проверяем, что запрос не пустой
+	if len(req.Urls) == 0 {
+		return &pb.BatchPostResponse{
+			Error: "Batch cannot be empty",
+		}, status.Error(codes.InvalidArgument, "Batch cannot be empty")
+	}
+
+	var batchRequests []models.BatchRequest
+	for _, url := range req.Urls {
+		batchRequests = append(batchRequests, models.BatchRequest{
+			OriginalURL:   url.OriginalUrl,
+			CorrelationID: url.CorrelationId,
+		})
+	}
+
+	// Обрабатываем запрос
+	var res []*pb.BatchResponse
+	var batchResponse []models.BatchResponse
+	processBatchPost(batchRequests, userID, &batchResponse)
+
+	for _, batchRes := range batchResponse {
+		res = append(res, &pb.BatchResponse{
+			CorrelationId: batchRes.CorrelationID,
+			ShortUrl:      batchRes.ShortURL,
+		},
+		)
+	}
+
+	return &pb.BatchPostResponse{
+		Urls: res,
+	}, nil
 }

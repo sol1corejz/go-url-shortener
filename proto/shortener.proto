@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "shortener/proto";
+
+message CreateShortURLRequest {
+  string original_url = 1;
+  string user_id = 2;
+}
+
+message CreateShortURLResponse {
+  string short_url = 1;
+  string error = 2;
+}
+
+message CreateJSONShortURLRequest {
+  string user_id = 1;
+  string original_url = 2;
+}
+
+message CreateJSONShortURLResponse {
+  string short_url = 1;
+  string error = 2;
+}
+
+message GetInternalStatsRequest {}
+
+message GetInternalStatsResponse {
+  int32 urls = 1;
+  int32 users = 2;
+  string error = 3;
+}
+
+message GetURLRequest {
+  string short_url = 1;
+}
+message GetURLResponse {
+  string url = 1;
+  string error = 2;
+}
+
+message URLData {
+  string uuid = 1;
+  string short_url = 2;
+  string original_url = 3;
+  string user_uuid = 4;
+  string correlation_id = 5;
+  bool is_deleted = 6;
+}
+
+message GetUserURLsRequest {
+  string user_id = 1;
+}
+
+message GetUserURLsResponse {
+  repeated URLData urls = 1;
+  string error = 2;
+}
+
+message PingServerRequest {}
+message PingServerResponse {
+  string pong = 1;
+  string error = 2;
+}
+
+message BatchRequest {
+  string original_url = 1;
+  string correlation_id = 2;
+}
+
+message BatchResponse {
+  string correlation_id = 1;
+  string short_url = 2;
+}
+
+message BatchPostRequest {
+  string user_id = 1;
+  repeated BatchRequest urls = 2;
+}
+
+message BatchPostResponse {
+  repeated BatchResponse urls = 1;
+  string error = 2;
+}
+
+message BatchDeleteRequest {
+  string user_id = 1;
+  repeated string ids = 2;
+}
+
+message BatchDeleteResponse {
+  string message = 1;
+  string error = 2;
+}
+
+
+service Shortener {
+  rpc CreateShortURL (CreateShortURLRequest) returns (CreateShortURLResponse);
+  rpc CreateJSONShortURL (CreateJSONShortURLRequest) returns (CreateJSONShortURLResponse);
+  rpc GetInternalStats (GetInternalStatsRequest) returns (GetInternalStatsResponse);
+  rpc GetURL (GetURLRequest) returns (GetURLResponse);
+  rpc GetUserURLs (GetUserURLsRequest) returns (GetUserURLsResponse);
+  rpc PingServer (PingServerRequest) returns (PingServerResponse);
+  rpc BatchPost(BatchPostRequest) returns (BatchPostResponse);
+  rpc BatchDelete (BatchDeleteRequest) returns (BatchDeleteResponse);
+}

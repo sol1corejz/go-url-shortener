@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	pb "github.com/sol1corejz/go-url-shortener/proto"
+	"google.golang.org/grpc/status"
 	"net/http"
 	"time"
 
@@ -135,4 +137,41 @@ func HandleJSONPost(w http.ResponseWriter, r *http.Request) {
 		logger.Log.Debug("error encoding response", zap.Error(err))
 		return
 	}
+}
+
+// CreateJSONShortURL обрабатывает gRPC-запрос для создания короткого URL из JSON-запроса.
+func (s *ShortenerServer) CreateJSONShortURL(ctx context.Context, req *pb.CreateJSONShortURLRequest) (*pb.CreateJSONShortURLResponse, error) {
+	userID := req.UserId
+	originalURL := req.OriginalUrl
+
+	// Проверка на пустой URL.
+	if originalURL == "" {
+		return &pb.CreateJSONShortURLResponse{
+			Error: "Empty URL",
+		}, status.Error(http.StatusBadRequest, "Empty URL")
+	}
+
+	// Используем общую бизнес-логику для сохранения URL.
+	shortURL, err := SaveShortURL(ctx, originalURL, userID)
+	if err != nil {
+		if errors.Is(err, storage.ErrAlreadyExists) {
+			return &pb.CreateJSONShortURLResponse{
+				ShortUrl: fmt.Sprintf("%s/%s", config.FlagBaseURL, shortURL),
+				Error:    "URL already exists",
+			}, status.Error(http.StatusBadRequest, "URL already exists")
+		}
+		if errors.Is(err, ErrTimeOut) {
+			return &pb.CreateJSONShortURLResponse{
+				Error: "Request timed out",
+			}, status.Error(http.StatusRequestTimeout, "Request timed out")
+		}
+		return &pb.CreateJSONShortURLResponse{
+			Error: "Failed to save URL",
+		}, status.Error(http.StatusInternalServerError, "Failed to save URL")
+	}
+
+	// Возвращаем успешный ответ.
+	return &pb.CreateJSONShortURLResponse{
+		ShortUrl: shortURL,
+	}, nil
 }

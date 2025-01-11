@@ -2,7 +2,11 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	pb "github.com/sol1corejz/go-url-shortener/proto"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"io"
 	"net/http"
 	"sync"
@@ -148,4 +152,24 @@ func fanInDeleteBatch(doneCh chan struct{}, resultChs ...chan error) chan error 
 	}()
 
 	return finalCh
+}
+
+// BatchDelete обрабатывает gRPC-запрос на удаление списка сокращённых URL.
+func (s *ShortenerServer) BatchDelete(ctx context.Context, req *pb.BatchDeleteRequest) (*pb.BatchDeleteResponse, error) {
+	userID := req.UserId
+
+	// Проверка, что список идентификаторов не пустой.
+	if len(req.Ids) == 0 {
+		return &pb.BatchDeleteResponse{
+			Error: "Batch cannot be empty",
+		}, status.Error(codes.InvalidArgument, "Batch cannot be empty")
+	}
+
+	// Запуск асинхронного процесса удаления.
+	go processDeleteBatch(req.Ids, userID)
+
+	// Возврат успешного ответа.
+	return &pb.BatchDeleteResponse{
+		Message: "Batch deletion started",
+	}, nil
 }
