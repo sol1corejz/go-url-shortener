@@ -72,14 +72,14 @@ func (s *ShortenerServer) GetURL(ctx context.Context, req *pb.GetURLRequest) (*p
 		// Если URL не найден, возвращаем ошибку 404 (Not Found).
 		return &pb.GetURLResponse{
 			Error: fmt.Sprintf("URL not found: %s", id),
-		}, status.Errorf(http.StatusNotFound, fmt.Sprintf("URL not found: %s", id))
+		}, status.Errorf(http.StatusNotFound, "URL not found: %s", id)
 	}
 
 	// Если URL был удалён, возвращаем ошибку 410 (Gone).
 	if deleted {
 		return &pb.GetURLResponse{
 			Error: fmt.Sprintf("URL deleted: %s", id),
-		}, status.Errorf(http.StatusNotFound, fmt.Sprintf("URL deleted: %s", id))
+		}, status.Errorf(http.StatusNotFound, "URL deleted: %s", id)
 	}
 
 	return &pb.GetURLResponse{

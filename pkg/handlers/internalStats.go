@@ -14,8 +14,8 @@ import (
 	"net/http"
 )
 
-// FailedToCountError - ошибка подсчета из бд
-var FailedToCountError = errors.New("failed to count error")
+// ErrFailedToCount - ошибка подсчета из бд
+var ErrFailedToCount = errors.New("failed to count error")
 
 // GetStats получает информацию из бд
 func GetStats() (int, int, error) {
@@ -23,14 +23,14 @@ func GetStats() (int, int, error) {
 	countURLs, err := storage.GetURLsCount()
 	if err != nil {
 		logger.Log.Error("Failed to count URLs", zap.Error(err))
-		return 0, 0, FailedToCountError
+		return 0, 0, ErrFailedToCount
 	}
 
 	// Получаем количество пользователей
 	countUsers, err := storage.GetUsersCount()
 	if err != nil {
 		logger.Log.Error("Failed to count users", zap.Error(err))
-		return 0, 0, FailedToCountError
+		return 0, 0, ErrFailedToCount
 	}
 
 	return countURLs, countUsers, nil
