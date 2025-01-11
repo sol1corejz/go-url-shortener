@@ -9,7 +9,6 @@ import (
 	"github.com/sol1corejz/go-url-shortener/internal/storage"
 	pb "github.com/sol1corejz/go-url-shortener/proto"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"net/http"
 )
@@ -70,7 +69,7 @@ func (s *ShortenerServer) GetInternalStats(ctx context.Context, req *pb.GetInter
 	if err != nil {
 		return &pb.GetInternalStatsResponse{
 			Error: "Failed to count stats",
-		}, status.Error(codes.Internal, "Failed to count stats")
+		}, status.Error(http.StatusInternalServerError, "Failed to count stats")
 	}
 
 	return &pb.GetInternalStatsResponse{
