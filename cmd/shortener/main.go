@@ -12,7 +12,11 @@ import (
 	"github.com/sol1corejz/go-url-shortener/internal/middlewares"
 	"github.com/sol1corejz/go-url-shortener/internal/storage"
 	"github.com/sol1corejz/go-url-shortener/pkg/handlers"
+	pb "github.com/sol1corejz/go-url-shortener/proto"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"log"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -50,6 +54,31 @@ func main() {
 
 	// Инициализирует хранилище на основе параметров конфигурации.
 	storage.InitializeStorage(ctx)
+
+	lis, err := net.Listen("tcp", ":8081")
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	// Список методов, которые требуют авторизации.
+	protectedMethods := []string{
+		"/proto.URLShortener/BatchDelete",
+		"/proto.URLShortener/BatchPost",
+		"/proto.URLShortener/CreateShortURL",
+		"/proto.URLShortener/CreateJSONShortURL",
+		"/proto.URLShortener/GetUserURLs",
+	}
+
+	// Создание GRPC-сервера с перехватчиком авторизации.
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(middlewares.AuthInterceptor(protectedMethods)),
+	)
+	pb.RegisterShortenerServer(grpcServer, &handlers.ShortenerServer{})
+
+	log.Println("gRPC server is running on port 50051")
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
 
 	// Запускает сервер, передавая канал `sigint` для обработки сигналов.
 	if err := run(ctx, sigint, idleConnsClosed); err != nil {
@@ -107,6 +136,17 @@ func run(ctx context.Context, sigint chan os.Signal, idleConnsClosed chan struct
 		r.Post("/shorten/batch", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleBatchPost)))
 		r.Get("/user/urls", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleGetUserURLs)))
 		r.Delete("/user/urls", logger.RequestLogger(middlewares.GzipMiddleware(handlers.HandleDeleteURLs)))
+	})
+
+	// Маршрут для получения статистики
+	r.Route("/api/internal", func(r chi.Router) {
+		if config.TrustedSubnet != "" {
+			r.Get("/stats", logger.RequestLogger(middlewares.TrustedSubnetMiddleware(config.TrustedSubnet, middlewares.GzipMiddleware(handlers.HandleGetInternalStats))))
+		} else {
+			r.Get("/stats", func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "Forbidden", http.StatusForbidden)
+			})
+		}
 	})
 
 	// Добавляет маршрут для проверки доступности сервера.

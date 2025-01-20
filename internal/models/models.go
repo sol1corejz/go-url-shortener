@@ -64,3 +64,13 @@ type BatchResponse struct {
 	// ShortURL — сокращённый URL, который был создан в результате пакетного запроса.
 	ShortURL string `json:"short_url"`
 }
+
+// InternalStatsResponse представляет структуру для ответа на запрос,
+// возвращая количество сокращенных URL и количество пользователей.
+type InternalStatsResponse struct {
+	// URLs — количество URL
+	URLs int `json:"urls"`
+
+	// URLs — количество пользователей
+	Users int `json:"users"`
+}
